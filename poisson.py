@@ -79,8 +79,6 @@ def run_hybrid_poisson(r, d, quads=False):
     tau, v = TestFunctions(W)
     a = (dot(sigma, tau) - div(tau) * u + div(sigma) * v) * dx
 
-    f = Function(U)
-    f.assign(0.0)
     L = -42.0 * dot(tau, n) * ds_t
 
     wh = Function(W)
@@ -89,8 +87,8 @@ def run_hybrid_poisson(r, d, quads=False):
               "pc_python_type": "firedrake.HybridizationPC",
               "hybridization_pc_type": "hypre",
               "hybridization_pc_hypre_type": "boomeramg",
-              "hybridization_ksp_rtol": 1e-8,
-              "hybridization_projector_tolerance": 1e-14}
+              "hybridization_ksp_type": "preonly",
+              "hybridization_ksp_rtol": 1e-14}
     solve(a == L, wh, solver_parameters=params)
     sigmah, uh = wh.split()
 

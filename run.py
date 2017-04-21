@@ -8,10 +8,7 @@ from poisson import run_primal_poisson, run_hybrid_poisson
 
 for flag in [False, True]:
     u = run_primal_poisson(4, 1, quads=flag)
-    sigmah, uh = run_hybrid_poisson(4, 1, quads=flag)
-    CG_element = u.function_space().ufl_element()
-    mesh = uh.function_space().mesh()
-    uh = interpolate(uh, FunctionSpace(mesh, CG_element))
+    sigmah, uh = run_hybrid_poisson(4, 2, quads=flag)
     vel, pr = run_helmholtz(4, 1, quads=flag)
 
     if flag:
