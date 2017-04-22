@@ -39,18 +39,22 @@ def run_primal_poisson(r, d, quads=False):
     return uh
 
 
-def run_mixed_poisson(r, d, quads=False, params=None):
-    """Solves the mixed Poisson equation with strong
-    boundary conditions on the scalar unknown. This
-    condition arises in the variational form as a
-    natural condition.
+def run_mixed_poisson(r, d, quads=False):
+    """Solves the mixed Poisson equation with strong boundary
+    conditions on the scalar unknown. This condition arises in
+    the variational form as a natural condition.
+
+    A hybridized and non-hybridized approach is taken. The solver
+    parameters specify which technique is used.
 
     :arg r: An ``int`` for computing the mesh resolution.
     :arg d: An ``int`` denoting the degree of approximation.
     :arg quads: A ``bool`` specifying whether to use a quad mesh.
-    :arg params: A ``dict`` describing a set of solver parameters.
 
-    Returns: The scalar solution and its negative flux.
+    Returns: The scalar solution and its negative flux for both
+             the hybridized case and standard mixed solve. The
+             error norms between the two are also returned for
+             sanity checking.
     """
 
     base = UnitSquareMesh(2 ** r, 2 ** r, quadrilateral=quads)
@@ -83,8 +87,31 @@ def run_mixed_poisson(r, d, quads=False, params=None):
 
     L = -42.0 * dot(tau, n) * ds_t
 
+    params = {"mat_type": "matfree",
+              "pc_type": "python",
+              "pc_python_type": "firedrake.HybridizationPC",
+              "hybridization_pc_type": "hypre",
+              "hybridization_pc_hypre_type": "boomeramg",
+              "hybridization_ksp_type": "preonly",
+              "hybridization_ksp_rtol": 1e-14}
+
+    params2 = {"pc_type": "fieldsplit",
+               "pc_fieldsplit_type": "schur",
+               "ksp_type": "gmres",
+               "pc_fieldsplit_schur_fact_type": "FULL",
+               "fieldsplit_0_ksp_type": "cg",
+               "fieldsplit_0_pc_factor_shift_type": "INBLOCKS",
+               "fieldsplit_1_pc_factor_shift_type": "INBLOCKS",
+               "fieldsplit_1_ksp_type": "cg"}
+
     wh = Function(W)
     solve(a == L, wh, solver_parameters=params)
-    sigmah, uh = wh.split()
+    sigma_h, u_h = wh.split()
 
-    return sigmah, uh
+    w = Function(W)
+    solve(a == L, w, solver_parameters=params2)
+    sigma_nh, u_nh = w.split()
+
+    return (sigma_h, u_h, sigma_nh, u_nh,
+            errornorm(sigma_h, sigma_nh),
+            errornorm(u_h, u_nh))

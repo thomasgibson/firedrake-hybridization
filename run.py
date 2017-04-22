@@ -4,29 +4,11 @@ from firedrake import *
 
 from poisson import run_primal_poisson, run_mixed_poisson
 
-params = {"mat_type": "matfree",
-          "pc_type": "python",
-          "pc_python_type": "firedrake.HybridizationPC",
-          "hybridization_pc_type": "hypre",
-          "hybridization_pc_hypre_type": "boomeramg",
-          "hybridization_ksp_type": "preonly",
-          "hybridization_ksp_rtol": 1e-14}
-
-params2 = {"pc_type": "fieldsplit",
-           "pc_fieldsplit_type": "schur",
-           "ksp_type": "gmres",
-           "pc_fieldsplit_schur_fact_type": "FULL",
-           "fieldsplit_0_ksp_type": "cg",
-           "fieldsplit_0_pc_factor_shift_type": "INBLOCKS",
-           "fieldsplit_1_pc_factor_shift_type": "INBLOCKS",
-           "fieldsplit_1_ksp_type": "cg"}
-
 
 for quad in [False, True]:
 
     primal_u = run_primal_poisson(3, 1, quads=quad)
-    sigma_h, u_h = run_mixed_poisson(3, 1, quads=quad, params=params)
-    sigma, u = run_mixed_poisson(3, 1, quads=quad, params=params2)
+    sigma_h, u_h, sigma_nh, u_nh, err_s, err_u = run_mixed_poisson(3, 1, quads=quad)
 
     name_primal = "primal_poisson"
     name_hybrid = "hybrid_poisson"
@@ -39,4 +21,7 @@ for quad in [False, True]:
 
     File(name_primal + ".pvd").write(primal_u)
     File(name_hybrid + ".pvd").write(sigma_h, u_h)
-    File(name_mixed + ".pvd").write(sigma, u)
+    File(name_mixed + ".pvd").write(sigma_nh, u_nh)
+
+    print(err_s)
+    print(err_u)
