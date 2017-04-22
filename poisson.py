@@ -39,16 +39,18 @@ def run_primal_poisson(r, d, quads=False):
     return uh
 
 
-def run_hybrid_poisson(r, d, quads=False):
-    """Runs a 3D solver for the mixed Poisson equation. This
-    solves the Poisson equation using a hybrided mixed method
-    solver.
+def run_mixed_poisson(r, d, quads=False, params=None):
+    """Solves the mixed Poisson equation with strong
+    boundary conditions on the scalar unknown. This
+    condition arises in the variational form as a
+    natural condition.
 
     :arg r: An ``int`` for computing the mesh resolution.
     :arg d: An ``int`` denoting the degree of approximation.
     :arg quads: A ``bool`` specifying whether to use a quad mesh.
+    :arg params: A ``dict`` describing a set of solver parameters.
 
-    Returns: The scalar solution.
+    Returns: The scalar solution and its negative flux.
     """
 
     base = UnitSquareMesh(2 ** r, 2 ** r, quadrilateral=quads)
@@ -82,13 +84,6 @@ def run_hybrid_poisson(r, d, quads=False):
     L = -42.0 * dot(tau, n) * ds_t
 
     wh = Function(W)
-    params = {"mat_type": "matfree",
-              "pc_type": "python",
-              "pc_python_type": "firedrake.HybridizationPC",
-              "hybridization_pc_type": "hypre",
-              "hybridization_pc_hypre_type": "boomeramg",
-              "hybridization_ksp_type": "preonly",
-              "hybridization_ksp_rtol": 1e-14}
     solve(a == L, wh, solver_parameters=params)
     sigmah, uh = wh.split()
 
