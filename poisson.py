@@ -3,40 +3,66 @@ from __future__ import absolute_import, print_function, division
 from firedrake import *
 
 
-def run_primal_poisson(r, d, quads=False):
-    """Runs a 3D elliptic solver for the Poisson equation. This
-    solves the non-mixed primal Poisson equation using an algebraic
-    multigrid solver.
+class PrimalPoissonProblem(object):
+    """A class describing the primal Poisson problem with
+    strong boundary conditions.
 
-    :arg r: An ``int`` for computing the mesh resolution.
-    :arg d: An ``int`` denoting the degree of approximation.
-    :arg quads: A ``bool`` specifying whether to use a quad mesh.
-
-    Returns: The scalar solution.
+    This operator uses the classical H1 formulation of the problem
+    for both simplicial and hexahedral extruded meshes.
     """
 
-    base = UnitSquareMesh(2 ** r, 2 ** r, quadrilateral=quads)
-    layers = 2 ** r
-    mesh = ExtrudedMesh(base, layers, layer_height=1.0 / layers)
+    def __init__(self, mesh, degree):
+        """Constructor for the PrimalPoissonProblem class.
 
-    V = FunctionSpace(mesh, "CG", d)
+        :arg mesh: An extruded Firedrake mesh.
+        :arg degree: The degree of approximation.
+        """
 
-    bcs = [DirichletBC(V, 0, "bottom"), DirichletBC(V, 42, "top")]
+        super(PrimalPoissonProblem, self).__init__()
 
-    u = TrialFunction(V)
-    v = TestFunction(V)
-    a = inner(grad(u), grad(v)) * dx
+        if not mesh.cell_set._extruded:
+            raise ValueError("This problem is designed for an extruded mesh.")
 
-    f = Function(V)
-    f.assign(0.0)
-    L = f * v * dx
+        V = FunctionSpace(mesh, "CG", degree)
 
-    uh = Function(V)
-    params = {"pc_type": "hypre",
-              "pc_hypre_type": "boomeramg"}
-    solve(a == L, uh, bcs=bcs, solver_parameters=params)
+        self._H1_space = V
 
-    return uh
+        self._trial_function = TrialFunction(self._H1_space)
+        self._test_function = TestFunction(self._H1_space)
+
+        u = self._trial_function
+        v = self._test_function
+        self._bilinear_form = inner(grad(u), grad(v))*dx
+
+        # Firedrake requires a linear form, even if it's just 0
+        f = Function(self._H1_space)
+        f.assign(0.0)
+        self._linear_form = f*v*dx
+
+        self._strong_bcs = [DirichletBC(self._H1_space, 0.0, "bottom"),
+                            DirichletBC(self._H1_space, 42.0, "top")]
+
+        analytic_sol = Function(self._H1_space)
+        x = SpatialCoordinate(mesh)
+        analytic_sol.interpolate(42.0*x[2])
+        self._analytic_solution = analytic_sol
+
+    def analytic_solution(self):
+        """Returns the analytic solution of the problem."""
+        return self._analytic_solution
+
+    def solve(self, parameters):
+        """Solves the primal Poisson equation given a set
+        of solver parameters.
+
+        :arg parameters: A ``dict`` of solver parameters.
+        """
+
+        uh = Function(self._H1_space)
+        solve(self._bilinear_form == self._linear_form, uh,
+              bcs=self._strong_bcs,
+              solver_parameters=parameters)
+        return uh
 
 
 def run_mixed_poisson(r, d, quads=False):
