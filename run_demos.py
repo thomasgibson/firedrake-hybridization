@@ -131,7 +131,7 @@ def test_primal_poisson():
 
 def test_mixed_poisson(hybridize=False):
     for quad in [False, True]:
-        u, p, analytic_u, analytic_p = run_mixed_poisson_demo(4, 1, quads=quad,
+        u, p, analytic_u, analytic_p = run_mixed_poisson_demo(5, 1, quads=quad,
                                                               hybridize=hybridize)
         u_err = errornorm(u, analytic_u)
         p_err = errornorm(p, analytic_p)
@@ -146,5 +146,5 @@ def test_mixed_poisson(hybridize=False):
 
 # test_primal_poisson()
 # test_helmholtz()
-flag = False
+flag = True
 test_mixed_poisson(hybridize=flag)

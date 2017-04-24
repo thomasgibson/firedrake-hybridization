@@ -128,12 +128,10 @@ class MixedPoissonProblem(object):
         g = Function(self._L2_space)
         g.interpolate(bc_fct)
 
-        self._linear_form = -20.0*q*dx - g*dot(v, n)*ds_v
+        self._linear_form = -20.0*q*dx + g*dot(v, n)*ds_v
 
-        bc_expr0 = Expression(("0.0", "0.0", "10.0"))
-        bc_expr1 = Expression(("0.0", "0.0", "-10.0"))
-        bc0 = DirichletBC(W.sub(0), bc_expr0, "top")
-        bc1 = DirichletBC(W.sub(0), bc_expr1, "bottom")
+        bc0 = DirichletBC(W.sub(0), Constant((0.0, 0.0, 10.0)), "top")
+        bc1 = DirichletBC(W.sub(0), Constant((0.0, 0.0, 10.0)), "bottom")
         self._bcs = [bc0, bc1]
 
         analytic_scalar = Function(self._L2_space, name="Analytic scalar")
