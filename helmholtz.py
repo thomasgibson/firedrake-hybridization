@@ -3,50 +3,65 @@ from __future__ import absolute_import, print_function, division
 from firedrake import *
 
 
-def run_helmholtz(r, d, quads=False):
-    """Runs a 2D Helmholtz problem on a unit square domain.
-    The solver uses Firedrake's hybridization framework to
-    generate the velocity and pressure solutions.
+class MixedHelmholtzProblem(object):
+    """A class describing the mixed Helmholtz problem.
 
-    :arg r: An ``int`` for computing the mesh resolution.
-    :arg d: An ``int`` denoting the degree of approximation.
-    :arg quads: A ``bool`` specifying whether to use a quad mesh.
-
-    Returns: The velocity and pressure approximations.
+    This operator uses the classical mixed Raviart-Thomas formulation
+    for both simplicial and quadrilateral 2D meshes.
     """
 
-    mesh = UnitSquareMesh(2 ** r, 2 ** r, quadrilateral=quads)
+    def __init__(self, mesh, degree):
+        """Constructor for the MixedHelmholtzOperator class.
 
-    if quads:
-        V = FunctionSpace(mesh, "RTCF", d)
-        U = FunctionSpace(mesh, "DQ", d - 1)
-    else:
-        V = FunctionSpace(mesh, "RT", d)
-        U = FunctionSpace(mesh, "DG", d - 1)
+        :arg mesh: A firedrake mesh.
+        :arg degree: The degree of approximation.
+        """
 
-    W = V * U
-    w = Function(W)
+        super(MixedHelmholtzProblem, self).__init__()
 
-    u, p = TrialFunctions(W)
-    v, q = TestFunctions(W)
+        if mesh.ufl_cell() == quadrilateral:
+            V = FunctionSpace(mesh, "RTCF", degree)
+            U = FunctionSpace(mesh, "DQ", degree - 1)
+        else:
+            V = FunctionSpace(mesh, "RT", degree)
+            U = FunctionSpace(mesh, "DG", degree - 1)
 
-    a = (dot(u, v) - div(v) * p + q * div(u) + p * q) * dx
+        self._mixedspace = V * U
+        self._hdiv_space = V
+        self._L2_space = U
 
-    f = Function(U)
-    x, y = SpatialCoordinate(mesh)
-    f.interpolate((1 + 8*pi*pi)*sin(2*pi*x)*sin(2*pi*y))
+        self._trial_functions = TrialFunctions(self._mixedspace)
+        self._test_functions = TestFunctions(self._mixedspace)
 
-    L = f * q * dx
+        u, p = self._trial_functions
+        v, q = self._test_functions
+        self._bilinear_form = (dot(u, v) - div(v)*p + q*div(u) + p*q)*dx
 
-    params = {"mat_type": "matfree",
-              "pc_type": "python",
-              "pc_python_type": "firedrake.HybridizationPC",
-              "hybridization_ksp_rtol": 1e-8,
-              "hybridization_pc_type": "lu",
-              "hybridization_ksp_type": "preonly",
-              "hybridization_projector_tolerance": 1e-14}
+        forcing_function = Function(self._L2_space)
+        x, y = SpatialCoordinate(mesh)
+        forcing_function.interpolate((1 + 8*pi*pi)*sin(2*pi*x)*sin(2*pi*y))
+        self._f = forcing_function
 
-    solve(a == L, w, solver_parameters=params)
-    vel, pr = w.split()
+        self._linear_form = self._f*q*dx
 
-    return vel, pr
+        analytic_scalar = Function(self._L2_space)
+        analytic_scalar.interpolate(sin(2*pi*x)*sin(2*pi*y))
+        analytic_flux = Function(self._hdiv_space)
+        analytic_flux.project(-grad(sin(2*pi*x)*sin(2*pi*y)))
+        self._analytic_solution = (analytic_flux, analytic_scalar)
+
+    def analytic_solution(self):
+        """Returns the analytic solution of the problem."""
+        return self._analytic_solution
+
+    def solve(self, parameters):
+        """Solves the mixed Helmholtz problem given a set
+        of solver parameters.
+
+        :arg parameters: A ``dict`` of solver parameters.
+        """
+
+        w = Function(self._mixedspace)
+        solve(self._bilinear_form == self._linear_form, w,
+              solver_parameters=parameters)
+        return w.split()
