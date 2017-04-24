@@ -9,6 +9,9 @@ import petsc4py
 petsc4py.init(sys.argv)
 
 
+__all__ = ["VerticalNormal"]
+
+
 # Credit to Eike Mueller for the kernel code
 class VerticalNormal(object):
     """Class for constructing a vertical normal field on a given

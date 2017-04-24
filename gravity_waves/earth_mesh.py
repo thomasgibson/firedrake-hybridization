@@ -10,8 +10,7 @@ def generate_earth_mesh(r_level, num_layers, thickness, hexes=False):
     """Generates an Earth-like spherical mesh for the gravity wave
     problem.
 
-    :arg r_level: An ``int`` denoting the number of refinement
-                           levels.
+    :arg r_level: An ``int`` denoting the number of refinement levels.
     :arg num_layers: An ``int`` denoting the number of mesh layers.
     :arg thickness: The thickness of the spherical shell (in meters).
     :arg hexes: A ``bool`` indicating whether to generate a hexahedral mesh.
