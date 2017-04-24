@@ -37,18 +37,21 @@ def run_helmholtz_demo(r, d, quads=False):
     return u, p, analytic_u, analytic_p
 
 
-for quad in [False, True]:
-    u, p, analytic_u, analytic_p = run_helmholtz_demo(6, 1, quads=quad)
-    u_err = errornorm(u, analytic_u)
-    p_err = errornorm(p, analytic_p)
+def test_helmholtz():
+    for quad in [False, True]:
+        u, p, analytic_u, analytic_p = run_helmholtz_demo(6, 1, quads=quad)
+        u_err = errornorm(u, analytic_u)
+        p_err = errornorm(p, analytic_p)
 
-    name = "mixed_helmholtz"
-    if quad:
-        name += "-quad"
+        name = "mixed_helmholtz"
+        if quad:
+            name += "-quad"
 
-    print(u_err)
-    print(p_err)
-    File(name + ".pvd").write(u, p, analytic_u, analytic_p)
+        print(u_err)
+        print(p_err)
+        File(name + ".pvd").write(u, p, analytic_u, analytic_p)
+
+test_helmholtz()
 
 
 # for quad in [False, True]:
