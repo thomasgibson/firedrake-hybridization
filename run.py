@@ -2,9 +2,9 @@ from __future__ import absolute_import, print_function, division
 
 from firedrake import *
 
-from poisson import run_primal_poisson, run_mixed_poisson
+from poisson import PrimalPoissonProblem
 from helmholtz import MixedHelmholtzProblem
-from meshes import generate_2d_square_mesh
+from meshes import generate_2d_square_mesh, generate_3d_cube_extr_mesh
 
 
 def run_helmholtz_demo(r, d, quads=False):
@@ -17,8 +17,7 @@ def run_helmholtz_demo(r, d, quads=False):
     :arg quads: A ``bool`` specifying whether to use a quad mesh.
 
     Returns: The velocity and pressure approximations, as well as
-             norms describing the approximation error with the
-             analytic solutions.
+             the analytic solutions.
     """
 
     mesh = generate_2d_square_mesh(r, quadrilateral=quads)
@@ -37,6 +36,29 @@ def run_helmholtz_demo(r, d, quads=False):
     return u, p, analytic_u, analytic_p
 
 
+def run_primal_poisson_demo(r, d, quads=False):
+    """Runs a 3D elliptic solver for the Poisson equation. This
+    solves the non-mixed primal Poisson equation using an algebraic
+    multigrid solver.
+
+    :arg r: An ``int`` for computing the mesh resolution.
+    :arg d: An ``int`` denoting the degree of approximation.
+    :arg quads: A ``bool`` specifying whether to use a quad mesh.
+
+    Returns: The scalar approximation and the analytic solution.
+    """
+
+    mesh = generate_3d_cube_extr_mesh(r, quadrilateral=quads)
+    primal_poisson_problem = PrimalPoissonProblem(mesh, d)
+
+    params = {"pc_type": "hypre",
+              "pc_hypre_type": "boomeramg"}
+    u = primal_poisson_problem.solve(params)
+    analytic_u = primal_poisson_problem.analytic_solution()
+
+    return u, analytic_u
+
+
 def test_helmholtz():
     for quad in [False, True]:
         u, p, analytic_u, analytic_p = run_helmholtz_demo(6, 1, quads=quad)
@@ -51,7 +73,20 @@ def test_helmholtz():
         print(p_err)
         File(name + ".pvd").write(u, p, analytic_u, analytic_p)
 
-test_helmholtz()
+
+def test_primal_poisson():
+    for quad in [False, True]:
+        u, analytic_u = run_primal_poisson_demo(6, 1, quads=quad)
+        u_err = errornorm(u, analytic_u)
+
+        name = "primal_poisson"
+        if quad:
+            name += "-quad"
+
+        print(u_err)
+        File(name + ".pvd").write(u, analytic_u)
+
+test_primal_poisson()
 
 
 # for quad in [False, True]:
