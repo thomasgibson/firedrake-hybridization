@@ -2,7 +2,7 @@ from __future__ import absolute_import, print_function, division
 
 from firedrake import *
 
-from poisson import PrimalPoissonProblem
+from poisson import PrimalPoissonProblem, MixedPoissonProblem
 from helmholtz import MixedHelmholtzProblem
 from meshes import generate_2d_square_mesh, generate_3d_cube_extr_mesh
 
@@ -59,6 +59,48 @@ def run_primal_poisson_demo(r, d, quads=False):
     return u, analytic_u
 
 
+def run_mixed_poisson_demo(r, d, quads=False, hybridize=False):
+    """Solves the mixed Poisson equation with strong boundary
+    conditions on the scalar unknown. This condition arises in
+    the variational form as a natural condition.
+
+    :arg r: An ``int`` for computing the mesh resolution.
+    :arg d: An ``int`` denoting the degree of approximation.
+    :arg quads: A ``bool`` specifying whether to use a quad mesh.
+    :arg hybridize: A ``bool`` indicating whether to use hybridization.
+
+    Returns: The scalar solution and its negative flux for both
+             the hybridized case and standard mixed solve. The
+             error norms between the two are also returned for
+             sanity checking.
+    """
+
+    mesh = generate_3d_cube_extr_mesh(r, quadrilateral=quads)
+    mixed_poisson_problem = MixedPoissonProblem(mesh, d)
+
+    if hybridize:
+        params = {"mat_type": "matfree",
+                  "pc_type": "python",
+                  "pc_python_type": "firedrake.HybridizationPC",
+                  "hybridization_pc_type": "hypre",
+                  "hybridization_pc_hypre_type": "boomeramg",
+                  "hybridization_ksp_type": "preonly",
+                  "hybridization_ksp_rtol": 1e-14}
+    else:
+        params = {"pc_type": "fieldsplit",
+                  "pc_fieldsplit_type": "schur",
+                  "ksp_type": "gmres",
+                  "pc_fieldsplit_schur_fact_type": "FULL",
+                  "fieldsplit_0_ksp_type": "cg",
+                  "fieldsplit_0_pc_factor_shift_type": "INBLOCKS",
+                  "fieldsplit_1_pc_factor_shift_type": "INBLOCKS",
+                  "fieldsplit_1_ksp_type": "cg"}
+    u, p = mixed_poisson_problem.solve(params)
+    analytic_u, analytic_p = mixed_poisson_problem.analytic_solution()
+
+    return u, p, analytic_u, analytic_p
+
+
 def test_helmholtz():
     for quad in [False, True]:
         u, p, analytic_u, analytic_p = run_helmholtz_demo(6, 1, quads=quad)
@@ -86,26 +128,23 @@ def test_primal_poisson():
         print(u_err)
         File(name + ".pvd").write(u, analytic_u)
 
-test_primal_poisson()
 
+def test_mixed_poisson(hybridize=False):
+    for quad in [False, True]:
+        u, p, analytic_u, analytic_p = run_mixed_poisson_demo(4, 1, quads=quad,
+                                                              hybridize=hybridize)
+        u_err = errornorm(u, analytic_u)
+        p_err = errornorm(p, analytic_p)
 
-# for quad in [False, True]:
+        name = "mixed_poisson"
+        if quad:
+            name += "-quad"
 
-#     primal_u = run_primal_poisson(3, 1, quads=quad)
-#     sigma_h, u_h, sigma_nh, u_nh, err_s, err_u = run_mixed_poisson(3, 1, quads=quad)
+        print(u_err)
+        print(p_err)
+        File(name + ".pvd").write(u, p, analytic_u, analytic_p)
 
-#     name_primal = "primal_poisson"
-#     name_hybrid = "hybrid_poisson"
-#     name_mixed = "mixed_poisson"
-
-#     if quad:
-#         name_primal += "-quad"
-#         name_hybrid += "-quad"
-#         name_mixed += "-quad"
-
-#     File(name_primal + ".pvd").write(primal_u)
-#     File(name_hybrid + ".pvd").write(sigma_h, u_h)
-#     File(name_mixed + ".pvd").write(sigma_nh, u_nh)
-
-#     print(err_s)
-#     print(err_u)
+# test_primal_poisson()
+# test_helmholtz()
+flag = False
+test_mixed_poisson(hybridize=flag)
