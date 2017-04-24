@@ -44,7 +44,7 @@ class PrimalPoissonProblem(object):
                             DirichletBC(self._H1_space, bc_fct, 3),
                             DirichletBC(self._H1_space, bc_fct, 4)]
 
-        analytic_sol = Function(self._H1_space)
+        analytic_sol = Function(self._H1_space, name="Analytic scalar")
         analytic_sol.interpolate(bc_fct)
         self._analytic_solution = analytic_sol
 
@@ -63,7 +63,11 @@ class PrimalPoissonProblem(object):
         solve(self._bilinear_form == self._linear_form, uh,
               bcs=self._strong_bcs,
               solver_parameters=parameters)
-        return uh
+
+        u = Function(self._H1_space, name="Approximate scalar")
+        u.assign(uh)
+
+        return u
 
 
 class MixedPoissonProblem(object):
@@ -132,9 +136,9 @@ class MixedPoissonProblem(object):
         bc1 = DirichletBC(W.sub(0), bc_expr1, "bottom")
         self._bcs = [bc0, bc1]
 
-        analytic_scalar = Function(self._L2_space, name="Analytic Scalar")
+        analytic_scalar = Function(self._L2_space, name="Analytic scalar")
         analytic_scalar.interpolate(bc_fct)
-        analytic_flux = Function(self._hdiv_space, name="Analytic Flux")
+        analytic_flux = Function(self._hdiv_space, name="Analytic flux")
         analytic_flux.project(grad(bc_fct))
         self._analytic_solution = (analytic_flux, analytic_scalar)
 
@@ -153,10 +157,10 @@ class MixedPoissonProblem(object):
         solve(self._bilinear_form == self._linear_form, w,
               bcs=self._bcs,
               solver_parameters=parameters)
-        u = Function(self._hdiv_space, name="Approximate Flux")
-        p = Function(self._L2_space, name="Approximate Scalar")
-
         udat, pdat = w.split()
+
+        u = Function(self._hdiv_space, name="Approximate flux")
+        p = Function(self._L2_space, name="Approximate scalar")
         u.assign(udat)
         p.assign(pdat)
 
