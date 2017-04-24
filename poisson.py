@@ -34,17 +34,18 @@ class PrimalPoissonProblem(object):
         v = self._test_function
         self._bilinear_form = inner(grad(u), grad(v))*dx
 
-        # Firedrake requires a linear form, even if it's just 0
-        f = Function(self._H1_space)
-        f.assign(0.0)
-        self._linear_form = f*v*dx
+        self._linear_form = -20.0*v*dx + 10.0*v*ds_tb
 
-        self._strong_bcs = [DirichletBC(self._H1_space, 0.0, "bottom"),
-                            DirichletBC(self._H1_space, 42.0, "top")]
+        x = SpatialCoordinate(mesh)
+        bc_fct = 10.0*(x[2] - 0.5)*(x[2] - 0.5)
+
+        self._strong_bcs = [DirichletBC(self._H1_space, bc_fct, 1),
+                            DirichletBC(self._H1_space, bc_fct, 2),
+                            DirichletBC(self._H1_space, bc_fct, 3),
+                            DirichletBC(self._H1_space, bc_fct, 4)]
 
         analytic_sol = Function(self._H1_space)
-        x = SpatialCoordinate(mesh)
-        analytic_sol.interpolate(42.0*x[2])
+        analytic_sol.interpolate(bc_fct)
         self._analytic_solution = analytic_sol
 
     def analytic_solution(self):
@@ -65,79 +66,98 @@ class PrimalPoissonProblem(object):
         return uh
 
 
-def run_mixed_poisson(r, d, quads=False):
-    """Solves the mixed Poisson equation with strong boundary
-    conditions on the scalar unknown. This condition arises in
-    the variational form as a natural condition.
+class MixedPoissonProblem(object):
+    """A class describing the mixed Poisson problem with
+    strong boundary conditions on the scalar variable. The
+    boundary condition arises in the variational formulation
+    as a natural boundary condition.
 
-    A hybridized and non-hybridized approach is taken. The solver
-    parameters specify which technique is used.
-
-    :arg r: An ``int`` for computing the mesh resolution.
-    :arg d: An ``int`` denoting the degree of approximation.
-    :arg quads: A ``bool`` specifying whether to use a quad mesh.
-
-    Returns: The scalar solution and its negative flux for both
-             the hybridized case and standard mixed solve. The
-             error norms between the two are also returned for
-             sanity checking.
+    This operator uses the classical mixed Raviart-Thomas formulation
+    for both simplicial and hexahedral extruded meshes.
     """
 
-    base = UnitSquareMesh(2 ** r, 2 ** r, quadrilateral=quads)
-    layers = 2 ** r
-    mesh = ExtrudedMesh(base, layers, layer_height=1.0 / layers)
-    n = FacetNormal(mesh)
+    def __init__(self, mesh, degree):
+        """Constructor for the MixedPoissonProblem class.
 
-    if quads:
-        RT = FiniteElement("RTCF", quadrilateral, d)
-        DG_v = FiniteElement("DG", interval, d - 1)
-        DG_h = FiniteElement("DQ", quadrilateral, d - 1)
-        CG = FiniteElement("CG", interval, d)
-        U = FunctionSpace(mesh, "DQ", d - 1)
+        :arg mesh: An extruded Firedrake mesh.
+        :arg degree: The degree of approximation.
+        """
 
-    else:
-        RT = FiniteElement("RT", triangle, d)
-        DG_v = FiniteElement("DG", interval, d - 1)
-        DG_h = FiniteElement("DG", triangle, d - 1)
-        CG = FiniteElement("CG", interval, d)
-        U = FunctionSpace(mesh, "DG", d - 1)
+        super(MixedPoissonProblem, self).__init__()
 
-    HDiv_ele = EnrichedElement(HDiv(TensorProductElement(RT, DG_v)),
-                               HDiv(TensorProductElement(DG_h, CG)))
-    V = FunctionSpace(mesh, HDiv_ele)
-    W = V * U
+        if not mesh.cell_set._extruded:
+            raise ValueError("This problem is designed for an extruded mesh.")
 
-    sigma, u = TrialFunctions(W)
-    tau, v = TestFunctions(W)
-    a = (dot(sigma, tau) - div(tau) * u + div(sigma) * v) * dx
+        n = FacetNormal(mesh)
 
-    L = -42.0 * dot(tau, n) * ds_t
+        if mesh._base_mesh.ufl_cell() == quadrilateral:
+            RT = FiniteElement("RTCF", quadrilateral, degree)
+            DG_v = FiniteElement("DG", interval, degree - 1)
+            DG_h = FiniteElement("DQ", quadrilateral, degree - 1)
+            CG = FiniteElement("CG", interval, degree)
+            U = FunctionSpace(mesh, "DQ", degree - 1)
 
-    params = {"mat_type": "matfree",
-              "pc_type": "python",
-              "pc_python_type": "firedrake.HybridizationPC",
-              "hybridization_pc_type": "hypre",
-              "hybridization_pc_hypre_type": "boomeramg",
-              "hybridization_ksp_type": "preonly",
-              "hybridization_ksp_rtol": 1e-14}
+        else:
+            RT = FiniteElement("RT", triangle, degree)
+            DG_v = FiniteElement("DG", interval, degree - 1)
+            DG_h = FiniteElement("DG", triangle, degree - 1)
+            CG = FiniteElement("CG", interval, degree)
+            U = FunctionSpace(mesh, "DG", degree - 1)
 
-    params2 = {"pc_type": "fieldsplit",
-               "pc_fieldsplit_type": "schur",
-               "ksp_type": "gmres",
-               "pc_fieldsplit_schur_fact_type": "FULL",
-               "fieldsplit_0_ksp_type": "cg",
-               "fieldsplit_0_pc_factor_shift_type": "INBLOCKS",
-               "fieldsplit_1_pc_factor_shift_type": "INBLOCKS",
-               "fieldsplit_1_ksp_type": "cg"}
+        HDiv_ele = EnrichedElement(HDiv(TensorProductElement(RT, DG_v)),
+                                   HDiv(TensorProductElement(DG_h, CG)))
+        V = FunctionSpace(mesh, HDiv_ele)
+        W = V * U
+        self._mixedspace = W
+        self._hdiv_space = V
+        self._L2_space = U
 
-    wh = Function(W)
-    solve(a == L, wh, solver_parameters=params)
-    sigma_h, u_h = wh.split()
+        self._trial_functions = TrialFunctions(self._mixedspace)
+        self._test_functions = TestFunctions(self._mixedspace)
 
-    w = Function(W)
-    solve(a == L, w, solver_parameters=params2)
-    sigma_nh, u_nh = w.split()
+        u, p = self._trial_functions
+        v, q = self._test_functions
+        self._bilinear_form = (dot(u, v) + div(v)*p + q*div(u))*dx
 
-    return (sigma_h, u_h, sigma_nh, u_nh,
-            errornorm(sigma_h, sigma_nh),
-            errornorm(u_h, u_nh))
+        x = SpatialCoordinate(mesh)
+        bc_fct = 10.0*(x[2] - 0.5)*(x[2] - 0.5)
+        g = Function(self._L2_space)
+        g.interpolate(bc_fct)
+
+        self._linear_form = -20.0*q*dx - g*dot(v, n)*ds_v
+
+        bc_expr0 = Expression(("0.0", "0.0", "10.0"))
+        bc_expr1 = Expression(("0.0", "0.0", "-10.0"))
+        bc0 = DirichletBC(W.sub(0), bc_expr0, "top")
+        bc1 = DirichletBC(W.sub(0), bc_expr1, "bottom")
+        self._bcs = [bc0, bc1]
+
+        analytic_scalar = Function(self._L2_space, name="Analytic Scalar")
+        analytic_scalar.interpolate(bc_fct)
+        analytic_flux = Function(self._hdiv_space, name="Analytic Flux")
+        analytic_flux.project(grad(bc_fct))
+        self._analytic_solution = (analytic_flux, analytic_scalar)
+
+    def analytic_solution(self):
+        """Returns the analytic solution of the problem."""
+        return self._analytic_solution
+
+    def solve(self, parameters):
+        """Solves the mixed Poisson problem given a set
+        of solver parameters.
+
+        :arg parameters: A ``dict`` of solver parameters.
+        """
+
+        w = Function(self._mixedspace)
+        solve(self._bilinear_form == self._linear_form, w,
+              bcs=self._bcs,
+              solver_parameters=parameters)
+        u = Function(self._hdiv_space, name="Approximate Flux")
+        p = Function(self._L2_space, name="Approximate Scalar")
+
+        udat, pdat = w.split()
+        u.assign(udat)
+        p.assign(pdat)
+
+        return u, p
