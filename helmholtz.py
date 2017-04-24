@@ -11,7 +11,7 @@ class MixedHelmholtzProblem(object):
     """
 
     def __init__(self, mesh, degree):
-        """Constructor for the MixedHelmholtzOperator class.
+        """Constructor for the MixedHelmholtzProblem class.
 
         :arg mesh: A firedrake mesh.
         :arg degree: The degree of approximation.
