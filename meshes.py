@@ -51,6 +51,3 @@ def generate_3d_cube_extr_mesh(r, quadrilateral=False):
     layers = 2 ** r
     layer_height = 1.0 / layers
     return ExtrudedMesh(base, layers=layers, layer_height=layer_height)
-
-
-# TODO: Add sphere mesh for the gravity wave test case
