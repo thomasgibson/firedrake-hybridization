@@ -21,17 +21,15 @@ def generate_2d_square_mesh(r, quadrilateral=False):
     return UnitSquareMesh(2 ** r, 2 ** r, quadrilateral=quadrilateral)
 
 
-def generate_3d_cube_mesh(r, quadrilateral=False):
+def generate_3d_cube_mesh(r):
     """Generates a firedrake mesh of a unit cube domain:
     [0, 1] x [0, 1] x [0, 1].
 
     :arg r: An ``int`` for computing the mesh resolution.
-    :arg quadrilateral: A ``bool`` denoting whether to use
-                        quadrilateral-prism mesh cells.
 
     Returns: A Firedrake mesh.
     """
-    return UnitCubeMesh(2 ** r, 2 ** r, 2 ** r, quadrilateral=quadrilateral)
+    return UnitCubeMesh(2 ** r, 2 ** r, 2 ** r)
 
 
 def generate_3d_cube_extr_mesh(r, quadrilateral=False):
