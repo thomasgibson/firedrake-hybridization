@@ -39,10 +39,7 @@ class PrimalPoissonProblem(object):
         x = SpatialCoordinate(mesh)
         bc_fct = 10.0*(x[2] - 0.5)*(x[2] - 0.5)
 
-        self._strong_bcs = [DirichletBC(self._H1_space, bc_fct, 1),
-                            DirichletBC(self._H1_space, bc_fct, 2),
-                            DirichletBC(self._H1_space, bc_fct, 3),
-                            DirichletBC(self._H1_space, bc_fct, 4)]
+        self._bcs = DirichletBC(self._H1_space, bc_fct, (1, 2, 3, 4))
 
         analytic_sol = Function(self._H1_space,
                                 name="Analytic scalar (primal)")
@@ -62,7 +59,7 @@ class PrimalPoissonProblem(object):
 
         uh = Function(self._H1_space)
         solve(self._bilinear_form == self._linear_form, uh,
-              bcs=self._strong_bcs,
+              bcs=self._bcs,
               solver_parameters=parameters)
 
         u = Function(self._H1_space, name="Approximate scalar (primal)")
@@ -126,14 +123,11 @@ class MixedPoissonProblem(object):
 
         x = SpatialCoordinate(mesh)
         bc_fct = 10.0*(x[2] - 0.5)*(x[2] - 0.5)
-        g = Function(self._L2_space)
-        g.interpolate(bc_fct)
+        g = Function(self._L2_space).interpolate(bc_fct)
 
         self._linear_form = -20.0*q*dx + g*dot(v, n)*ds_v
 
-        bc0 = DirichletBC(W.sub(0), Constant((0.0, 0.0, 10.0)), "top")
-        bc1 = DirichletBC(W.sub(0), Constant((0.0, 0.0, -10.0)), "bottom")
-        self._bcs = [bc0, bc1]
+        self._bcs = DirichletBC(W.sub(0), grad(bc_fct), (1, 2, 3, 4))
 
         analytic_scalar = Function(self._L2_space,
                                    name="Analytic scalar (mixed)")
