@@ -44,9 +44,11 @@ class MixedHelmholtzProblem(object):
 
         self._linear_form = self._f*q*dx
 
-        analytic_scalar = Function(self._L2_space, name="Analytic scalar")
+        analytic_scalar = Function(self._L2_space,
+                                   name="Analytic scalar (mixed)")
         analytic_scalar.interpolate(sin(2*pi*x)*sin(2*pi*y))
-        analytic_flux = Function(self._hdiv_space, name="Analytic flux")
+        analytic_flux = Function(self._hdiv_space,
+                                 name="Analytic flux (mixed)")
         analytic_flux.project(-grad(sin(2*pi*x)*sin(2*pi*y)))
         self._analytic_solution = (analytic_flux, analytic_scalar)
 
@@ -66,8 +68,8 @@ class MixedHelmholtzProblem(object):
               solver_parameters=parameters)
         udat, pdat = w.split()
 
-        u = Function(self._hdiv_space, name="Approximate flux")
-        p = Function(self._L2_space, name="Approximate scalar")
+        u = Function(self._hdiv_space, name="Approximate flux (mixed)")
+        p = Function(self._L2_space, name="Approximate scalar (mixed)")
         u.assign(udat)
         p.assign(pdat)
 

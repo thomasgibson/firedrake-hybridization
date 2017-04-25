@@ -44,7 +44,8 @@ class PrimalPoissonProblem(object):
                             DirichletBC(self._H1_space, bc_fct, 3),
                             DirichletBC(self._H1_space, bc_fct, 4)]
 
-        analytic_sol = Function(self._H1_space, name="Analytic scalar")
+        analytic_sol = Function(self._H1_space,
+                                name="Analytic scalar (primal)")
         analytic_sol.interpolate(bc_fct)
         self._analytic_solution = analytic_sol
 
@@ -64,7 +65,7 @@ class PrimalPoissonProblem(object):
               bcs=self._strong_bcs,
               solver_parameters=parameters)
 
-        u = Function(self._H1_space, name="Approximate scalar")
+        u = Function(self._H1_space, name="Approximate scalar (primal)")
         u.assign(uh)
 
         return u
@@ -131,12 +132,14 @@ class MixedPoissonProblem(object):
         self._linear_form = -20.0*q*dx + g*dot(v, n)*ds_v
 
         bc0 = DirichletBC(W.sub(0), Constant((0.0, 0.0, 10.0)), "top")
-        bc1 = DirichletBC(W.sub(0), Constant((0.0, 0.0, 10.0)), "bottom")
+        bc1 = DirichletBC(W.sub(0), Constant((0.0, 0.0, -10.0)), "bottom")
         self._bcs = [bc0, bc1]
 
-        analytic_scalar = Function(self._L2_space, name="Analytic scalar")
+        analytic_scalar = Function(self._L2_space,
+                                   name="Analytic scalar (mixed)")
         analytic_scalar.interpolate(bc_fct)
-        analytic_flux = Function(self._hdiv_space, name="Analytic flux")
+        analytic_flux = Function(self._hdiv_space,
+                                 name="Analytic flux (mixed)")
         analytic_flux.project(grad(bc_fct))
         self._analytic_solution = (analytic_flux, analytic_scalar)
 
@@ -157,8 +160,8 @@ class MixedPoissonProblem(object):
               solver_parameters=parameters)
         udat, pdat = w.split()
 
-        u = Function(self._hdiv_space, name="Approximate flux")
-        p = Function(self._L2_space, name="Approximate scalar")
+        u = Function(self._hdiv_space, name="Approximate flux (mixed)")
+        p = Function(self._L2_space, name="Approximate scalar (mixed)")
         u.assign(udat)
         p.assign(pdat)
 
