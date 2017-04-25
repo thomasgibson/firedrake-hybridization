@@ -59,7 +59,8 @@ def run_primal_poisson_demo(r, d, quads=False):
     return u, analytic_u
 
 
-def run_mixed_poisson_demo(r, d, quads=False, hybridize=False):
+def run_mixed_poisson_demo(r, d, quads=False, hybridize=False,
+                           direct_solve=False):
     """Solves the mixed Poisson equation with strong boundary
     conditions on the scalar unknown. This condition arises in
     the variational form as a natural condition.
@@ -68,6 +69,8 @@ def run_mixed_poisson_demo(r, d, quads=False, hybridize=False):
     :arg d: An ``int`` denoting the degree of approximation.
     :arg quads: A ``bool`` specifying whether to use a quad mesh.
     :arg hybridize: A ``bool`` indicating whether to use hybridization.
+    :arg direct_solve: A ``bool`` indicating whether to use a direct
+                       solver on the global system (for testing only).
 
     Returns: The scalar solution and its negative flux for both
              the hybridized case and standard mixed solve. The
@@ -79,22 +82,35 @@ def run_mixed_poisson_demo(r, d, quads=False, hybridize=False):
     mixed_poisson_problem = MixedPoissonProblem(mesh, d)
 
     if hybridize:
-        params = {"mat_type": "matfree",
-                  "pc_type": "python",
-                  "pc_python_type": "firedrake.HybridizationPC",
-                  "hybridization_pc_type": "hypre",
-                  "hybridization_pc_hypre_type": "boomeramg",
-                  "hybridization_ksp_type": "preonly",
-                  "hybridization_ksp_rtol": 1e-14}
+        if direct_solve:
+            params = {"mat_type": "matfree",
+                      "pc_type": "python",
+                      "pc_python_type": "firedrake.HybridizationPC",
+                      "hybridization_pc_type": "lu",
+                      "hybridization_pc_factor_mat_solver_package": "mumps"}
+        else:
+            params = {"mat_type": "matfree",
+                      "pc_type": "python",
+                      "pc_python_type": "firedrake.HybridizationPC",
+                      "hybridization_pc_type": "hypre",
+                      "hybridization_pc_hypre_type": "boomeramg",
+                      "hybridization_ksp_type": "preonly",
+                      "hybridization_ksp_rtol": 1e-14}
     else:
-        params = {"pc_type": "fieldsplit",
-                  "pc_fieldsplit_type": "schur",
-                  "ksp_type": "gmres",
-                  "pc_fieldsplit_schur_fact_type": "FULL",
-                  "fieldsplit_0_ksp_type": "cg",
-                  "fieldsplit_0_pc_factor_shift_type": "INBLOCKS",
-                  "fieldsplit_1_pc_factor_shift_type": "INBLOCKS",
-                  "fieldsplit_1_ksp_type": "cg"}
+        if direct_solve:
+            params = {"mat_type": "aij",
+                      "pc_type": "lu",
+                      "pc_factor_mat_solver_package": "mumps"}
+        else:
+            params = {"pc_type": "fieldsplit",
+                      "pc_fieldsplit_type": "schur",
+                      "ksp_type": "gmres",
+                      "pc_fieldsplit_schur_fact_type": "FULL",
+                      "fieldsplit_0_ksp_type": "cg",
+                      "fieldsplit_0_pc_factor_shift_type": "INBLOCKS",
+                      "fieldsplit_1_pc_factor_shift_type": "INBLOCKS",
+                      "fieldsplit_1_ksp_type": "cg"}
+
     u, p = mixed_poisson_problem.solve(params)
     analytic_u, analytic_p = mixed_poisson_problem.analytic_solution()
 
@@ -107,7 +123,7 @@ def test_helmholtz():
         u_err = errornorm(u, analytic_u)
         p_err = errornorm(p, analytic_p)
 
-        name = "mixed_helmholtz"
+        name = "helmholtz"
         if quad:
             name += "-quad"
 
@@ -129,10 +145,11 @@ def test_primal_poisson():
         File(name + ".pvd").write(u, analytic_u)
 
 
-def test_mixed_poisson(hybridize=False):
+def test_mixed_poisson(hybridize=False, direct_solve=False):
     for quad in [False, True]:
-        u, p, analytic_u, analytic_p = run_mixed_poisson_demo(5, 1, quads=quad,
-                                                              hybridize=hybridize)
+        u, p, analytic_u, analytic_p = run_mixed_poisson_demo(4, 1, quads=quad,
+                                                              hybridize=hybridize,
+                                                              direct_solve=direct_solve)
         u_err = errornorm(u, analytic_u)
         p_err = errornorm(p, analytic_p)
 
@@ -144,7 +161,8 @@ def test_mixed_poisson(hybridize=False):
         print(p_err)
         File(name + ".pvd").write(u, p, analytic_u, analytic_p)
 
-# test_primal_poisson()
-# test_helmholtz()
-flag = True
-test_mixed_poisson(hybridize=flag)
+test_primal_poisson()
+test_helmholtz()
+flag = False
+dflag = True
+test_mixed_poisson(hybridize=flag, direct_solve=dflag)
