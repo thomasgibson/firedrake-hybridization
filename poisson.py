@@ -125,9 +125,11 @@ class MixedPoissonProblem(object):
         bc_fct = 10.0*(x[2] - 0.5)*(x[2] - 0.5)
         g = Function(self._L2_space).interpolate(bc_fct)
 
-        self._linear_form = -20.0*q*dx + g*dot(v, n)*ds_v
+        self._linear_form = 20.0*q*dx + g*dot(v, n)*ds_v
 
-        self._bcs = DirichletBC(W.sub(0), grad(bc_fct), (1, 2, 3, 4))
+
+        self._bcs =[DirichletBC(W.sub(0), Expression(("0", "0", "10")), "top"),
+                    DirichletBC(W.sub(0), Expression(("0", "0", "-10")), "bottom")]
 
         analytic_scalar = Function(self._L2_space,
                                    name="Analytic scalar (mixed)")
