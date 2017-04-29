@@ -52,6 +52,11 @@ class MixedHelmholtzProblem(object):
         analytic_flux.project(-grad(sin(2*pi*x)*sin(2*pi*y)))
         self._analytic_solution = (analytic_flux, analytic_scalar)
 
+        self.w = Function(self._mixedspace)
+        self.problem = LinearVariationalProblem(self._bilinear_form,
+                                                self._linear_form,
+                                                self.w)
+
     def analytic_solution(self):
         """Returns the analytic solution of the problem."""
         return self._analytic_solution
@@ -63,10 +68,10 @@ class MixedHelmholtzProblem(object):
         :arg parameters: A ``dict`` of solver parameters.
         """
 
-        w = Function(self._mixedspace)
-        solve(self._bilinear_form == self._linear_form, w,
-              solver_parameters=parameters)
-        udat, pdat = w.split()
+        solver = LinearVariationalSolver(self.problem,
+                                         solver_parameters=parameters)
+        solver.solve()
+        udat, pdat = self.w.split()
 
         u = Function(self._hdiv_space, name="Approximate flux (mixed)")
         p = Function(self._L2_space, name="Approximate scalar (mixed)")
