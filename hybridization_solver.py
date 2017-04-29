@@ -33,7 +33,7 @@ x, y = SpatialCoordinate(mesh)
 f.interpolate((1 + 8*pi*pi)*sin(2*pi*x)*sin(2*pi*y))
 
 a = (dot(sigma, tau) - div(tau)*u + v*div(sigma) + u*v)*dx
-L = f*v*dx - 0.5*dot(tau, n)*ds(4) - 0.5*dot(tau, n)*ds(2)
+L = f*v*dx - 10*dot(tau, n)*ds(4) - 10*dot(tau, n)*ds(2)
 
 bcs = DirichletBC(T, Constant(0.0), (1, 2, 3, 4))
 
