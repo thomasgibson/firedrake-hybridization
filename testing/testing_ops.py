@@ -18,7 +18,7 @@ a = (dot(u, v) + div(v)*p + q*div(u))*dx
 x = SpatialCoordinate(mesh)
 f = Function(U).assign(0)
 
-L = f*q*dx + 42*dot(v, n)*ds(4)
+L = -f*q*dx + 42*dot(v, n)*ds(4)
 
 bcs = [DirichletBC(W.sub(0), Expression(("0", "0")), (1, 2))]
 L = assemble(L)
