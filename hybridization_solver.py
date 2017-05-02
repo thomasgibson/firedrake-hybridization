@@ -43,7 +43,7 @@ params = {"ksp_type": "preonly",
 w = Function(W)
 solve(a == L, w, bcs=bcs, solver_parameters=params)
 udat, pdat = w.split()
-uh = Fuction(V, name="Approximate flux").assign(udat)
+uh = Function(V, name="Approximate flux").assign(udat)
 ph = Function(U, name="Approximate scalar").assign(pdat)
 
 x = SpatialCoordinate(mesh)
