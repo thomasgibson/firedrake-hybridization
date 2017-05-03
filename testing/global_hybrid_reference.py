@@ -18,14 +18,14 @@ else:
     DG = FiniteElement("DG", triangle, degree - 1)
     Te = FiniteElement("HDiv Trace", triangle, degree - 1)
 
-V = FunctionSpace(mesh, RT)
+V = FunctionSpace(mesh, BrokenElement(RT))
 U = FunctionSpace(mesh, DG)
 T = FunctionSpace(mesh, Te)
 
 W = V * U * T
 
-u, p = TrialFunctions(W)
-v, q = TestFunctions(W)
+u, p, lambdar = TrialFunctions(W)
+v, q, gammar = TestFunctions(W)
 
 a_dx = (dot(u, v) + div(v)*p + q*div(u))*dx
 a_dS = (lambdar('+')*jump(v, n=n) + gammar('+')*jump(u, n=n))*dS

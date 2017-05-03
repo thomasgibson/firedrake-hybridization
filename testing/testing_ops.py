@@ -26,7 +26,7 @@ y = Function(W)
 for bc in bcs:
     bc.apply(y)
 
-rhs = assemble(L - assemble(action(a, y)))
+rhs = assemble(assemble(action(a, y)) - L)
 
 for bc in bcs:
     bc.apply(rhs)
