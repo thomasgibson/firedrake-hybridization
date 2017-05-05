@@ -8,15 +8,15 @@ x, y, z = SpatialCoordinate(mesh)
 
 V = FunctionSpace(mesh, "BDM", 2)
 U = FunctionSpace(mesh, "DG", 1)
-W = V * U
+W = U * V
 
 f = Function(U)
 f.interpolate(x*y*z)
 
 u_exact = Function(U, name="exact scalar").interpolate(x*y*z/12.0)
 
-sigma, u = TrialFunctions(W)
-tau, v = TestFunctions(W)
+u, sigma = TrialFunctions(W)
+v, tau = TestFunctions(W)
 
 a = (dot(sigma, tau) - div(tau)*u + v*div(sigma))*dx
 L = f*v*dx
@@ -30,10 +30,11 @@ params = {"ksp_type": "preonly",
           "hybridization_ksp_type": "preonly",
           "hybridization_projector_tolerance": 1e-14}
 
-nullsp = MixedVectorSpaceBasis(W, [W[0], VectorSpaceBasis(constant=True)])
+nullsp = MixedVectorSpaceBasis(W, [VectorSpaceBasis(constant=True), W[1]])
 w = Function(W)
 solve(a == L, w, nullspace=nullsp, solver_parameters=params)
 
-vdat, pdat = w.split()
+pdat, vdat = w.split()
 
+print(errornorm(pdat, u_exact))
 File("sphere.pvd").write(vdat, pdat, u_exact)
