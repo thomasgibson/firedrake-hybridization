@@ -43,3 +43,24 @@ params = {"ksp_type": "gmres",
           "ksp_rtol": 1e-10}
 w = Function(W)
 solve(a == L, w, bcs=bcs, solver_parameters=params)
+uh, ph, _ = w.split()
+
+Vc = FunctionSpace(mesh, RT)
+W2 = Vc * U
+
+u, p = TrialFunctions(W2)
+v, q = TestFunctions(W2)
+
+a = (dot(u, v) + div(v)*p + q*div(u))*dx
+
+x = SpatialCoordinate(mesh)
+f = Function(U).assign(0)
+bcs = DirichletBC(W2.sub(0), Expression(("0", "0")), (1, 2))
+
+L = -f*q*dx + 42*dot(v, n)*ds(4)
+w2 = Function(W2)
+solve(a == L, w2, bcs=bcs, solver_parameters=params)
+uc, pc = w2.split()
+
+print(errornorm(project(uh, Vc), uc))
+print(errornorm(ph, pc))
