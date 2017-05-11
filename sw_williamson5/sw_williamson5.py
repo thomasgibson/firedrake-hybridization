@@ -8,6 +8,7 @@ day = 24.*60.*60
 ref_level = 3
 dt = 3000.
 tmax = 3000.
+hybrid = False
 
 # Shallow water parameters
 R = 6371220
@@ -68,17 +69,20 @@ advection_dict = {}
 advection_dict["u"] = ThetaMethod(state, u0, ueqn)
 advection_dict["D"] = SSPRK3(state, D0, Deqn)
 
-hybrid_params = {'ksp_type': 'preonly',
-                 'ksp_monitor': True,
-                 'mat_type': 'matfree',
-                 'pc_type': 'python',
-                 'hybridization_ksp_monitor': True,
-                 'pc_python_type': 'firedrake.HybridizationPC',
-                 'hybridization_ksp_type': 'preonly',
-                 'hybridization_pc_type': 'lu',
-                 'hybridization_projector_tolerance': 1.0e-14}
+if hybrid:
+    params = {'ksp_type': 'preonly',
+              'ksp_monitor': True,
+              'mat_type': 'matfree',
+              'pc_type': 'python',
+              'hybridization_ksp_monitor': True,
+              'pc_python_type': 'firedrake.HybridizationPC',
+              'hybridization_ksp_type': 'preonly',
+              'hybridization_pc_type': 'lu',
+              'hybridization_projector_tolerance': 1.0e-14}
+else:
+    params = None
 
-linear_solver = ShallowWaterSolver(state, params=hybrid_params)
+linear_solver = ShallowWaterSolver(state, params=params)
 
 # Set up forcing
 sw_forcing = ShallowWaterForcing(state)
