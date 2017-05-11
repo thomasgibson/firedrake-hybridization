@@ -2,6 +2,7 @@ from gusto import *
 
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        Constant, as_vector)
+from swe_solver import SWESolver as ShallowWaterSolver
 import sys
 
 day = 24.*60.*60
