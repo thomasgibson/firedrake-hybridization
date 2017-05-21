@@ -3,6 +3,7 @@ from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        Constant, as_vector)
 from swe_solver import SWESolver as ShallowWaterSolver
+from hybrid_solver import SWEHybridSolver as HybridSWSolver
 import sys
 
 day = 24.*60.*60
@@ -10,6 +11,7 @@ ref_level = 3
 dt = 3000.
 tmax = 3000.
 hybrid = False
+manual_hybridization = False
 
 # Shallow water parameters
 R = 6371220
@@ -83,7 +85,10 @@ if hybrid:
 else:
     params = None
 
-linear_solver = ShallowWaterSolver(state, params=params)
+if manual_hybridization:
+    linear_solver = HybridSWSolver(state, params=params)
+else:
+    linear_solver = ShallowWaterSolver(state, params=params)
 
 # Set up forcing
 sw_forcing = ShallowWaterForcing(state)
