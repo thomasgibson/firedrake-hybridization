@@ -17,27 +17,35 @@ class SWEHybridSolver(Solver):
         # Split rhs vector symbolically
         u_in, D_in = split(state.xrhs)
 
-        W = state.W
-        w, phi = TestFunctions(W)
-        u, D = TrialFunctions(W)
+        self.W = state.W
+        w, phi = TestFunctions(self.W)
+        u, D = TrialFunctions(self.W)
 
         eqn = (inner(w, u) - beta*g*div(w)*D - inner(w, u_in)
                + phi*D + beta*H*phi*div(u) - phi*D_in)*dx
-        a = lhs(eqn)
-        L = assemble(rhs(eqn))
+        self.a = lhs(eqn)
+        self.L = rhs(eqn)
+
+        # Place to put result of mixed solution
+        self.uD = Function(self.W)
+
+    def manual_hybridization(self):
+        print("Manually hybridizing the system...")
 
         # Break the mixed space:
         print("Manually breaking the finite element spaces...")
-        Wd = FunctionSpace(W.mesh(),
+        Wd = FunctionSpace(self.W.mesh(),
                            MixedElement([BrokenElement(V.ufl_element())
-                                         for V in W]))
+                                         for V in self.W]))
+        # Place to put the broken result
+        self.uD_broken = Function(Wd)
 
         # Replace the arguments of the bilinear form with their
         # broken counterparts
         print("Replacing with broken arguments in the bilinear form...")
-        self.deqn = replace(a, dict(zip(a.arguments(),
-                                        (TestFunction(Wd),
-                                         TrialFunction(Wd)))))
+        self.deqn = replace(self.a, dict(zip(self.a.arguments(),
+                                             (TestFunction(Wd),
+                                              TrialFunction(Wd)))))
 
         # Create Slate tensor for the broken operator
         print("Creating Slate tensor for the broken operator...")
@@ -46,9 +54,15 @@ class SWEHybridSolver(Solver):
         # Introduce Lagrange multipliers
         print("Introducing Lagrange multipliers and constructing tensors...")
         sigma, _ = TrialFunctions(Wd)
-        T = FunctionSpace(W.mesh(), "HDiv Trace", W.ufl_element().degree())
+        T = FunctionSpace(self.W.mesh(), "HDiv Trace",
+                          self.W.ufl_element().degree())
+
+        # Function for multipliers
+        self.lambdar = Function(T)
+
         gammar = TestFunction(T)
-        self.trace_form = gammar('+')*inner(sigma, FacetNormal(W.mesh()))*dS
+        self.trace_form = gammar('+')*inner(sigma,
+                                            FacetNormal(self.W.mesh()))*dS
         K = Tensor(self.trace_form)
 
         trace_bcs = DirichletBC(T, Constant(0.0), "on_boundary")
@@ -56,6 +70,7 @@ class SWEHybridSolver(Solver):
         # Assemble schur complement
         print("Constructing the Schur system via local eliminations...")
         self.S = assemble(K * Atilde.inv * K.T, bcs=trace_bcs)
+        L = assemble(self.L)
         f, g = L.split()
         self.L_b = Function(Wd)
         f_b, g_b = self.L_b.split()
@@ -63,17 +78,12 @@ class SWEHybridSolver(Solver):
         interpolate(g, g_b)
         self.R = assemble(K * Atilde.inv * self.L_b)
 
-        # Solving globally for Lambda
-        self.lambdar = Function(T)
-
-        # Place to put result of mixed solution
-        self.uD = Function(W)
-
-        # Place to put the broken result
-        self.uD_broken = Function(Wd)
-
     def solve(self):
         from firedrake.formmanipulation import split_form
+
+        # Initial setup
+        self.manual_hybridization()
+
         # Solving globally for Lambda
         print("Solving global system for the Lagrange multipliers...")
         solve(self.S, self.lambdar, self.R,
