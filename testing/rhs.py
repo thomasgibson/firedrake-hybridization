@@ -29,13 +29,14 @@ a = (dot(u, v) + div(v)*p + q*div(u) + p*q)*dx
 
 x = SpatialCoordinate(mesh)
 f = Function(U).assign(10)
-g = Function(V).project(as_vector([x[0], x[1]]))
+g = Function(V).project(as_vector([x[1], x[0]]))
 
 L = -f*q*dx + dot(g, v)*dx
 
 usol = []
 psol = []
 for hybrid in [False, True]:
+    print(hybrid)
     if hybrid:
         params = {"ksp_type": "preonly",
                   "mat_type": "matfree",
@@ -46,8 +47,9 @@ for hybrid in [False, True]:
                   "hybridization_projector_tolerance": 1e-10}
         suffix = "-hybrid"
     else:
-        params = {"ksp_type": "gmres",
-                  "ksp_rtol": 1e-10}
+        params = {"ksp_type": "preonly",
+                  "pc_type": "lu",
+                  "mat_type": "aij"}
         suffix = ""
 
     w = Function(W)
