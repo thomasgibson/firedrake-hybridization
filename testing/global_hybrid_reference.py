@@ -27,20 +27,20 @@ W = V * U * T
 u, p, lambdar = TrialFunctions(W)
 v, q, gammar = TestFunctions(W)
 
-a_dx = (dot(u, v) + div(v)*p + q*div(u))*dx
+a_dx = (dot(u, v) + div(v)*p + q*div(u) + p*q)*dx
 a_dS = (lambdar('+')*jump(v, n=n) + gammar('+')*jump(u, n=n))*dS
 a = a_dx + a_dS
 
 x = SpatialCoordinate(mesh)
-f = Function(U).assign(0)
+f = Function(U).assign(10)
+g = Function(V).project(as_vector([x[1], x[0]]))
 
-L = -f*q*dx + 42*dot(v, n)*ds(4)
+L = -f*q*dx + dot(g, v)*dx
 
-bcs = [DirichletBC(W.sub(0), Expression(("0", "0")), (1, 2)),
-       DirichletBC(W.sub(2), Constant(0), (1, 2, 3, 4))]
-
+bcs = [DirichletBC(W.sub(2), Constant(0), (1, 2, 3, 4))]
 params = {"ksp_type": "gmres",
           "ksp_rtol": 1e-10}
+
 w = Function(W)
 solve(a == L, w, bcs=bcs, solver_parameters=params)
 uh, ph, _ = w.split()
@@ -51,15 +51,15 @@ W2 = Vc * U
 u, p = TrialFunctions(W2)
 v, q = TestFunctions(W2)
 
-a = (dot(u, v) + div(v)*p + q*div(u))*dx
+a = (dot(u, v) + div(v)*p + q*div(u) + p*q)*dx
 
 x = SpatialCoordinate(mesh)
-f = Function(U).assign(0)
-bcs = DirichletBC(W2.sub(0), Expression(("0", "0")), (1, 2))
+f = Function(U).assign(10)
+g = Function(V).project(as_vector([x[1], x[0]]))
 
-L = -f*q*dx + 42*dot(v, n)*ds(4)
+L = -f*q*dx + dot(g, v)*dx
 w2 = Function(W2)
-solve(a == L, w2, bcs=bcs, solver_parameters=params)
+solve(a == L, w2, solver_parameters=params)
 uc, pc = w2.split()
 
 print(errornorm(project(uh, Vc), uc))
