@@ -59,5 +59,6 @@ for hybrid in [False, True]:
     ph = Function(U, name="pressure"+suffix).assign(pdat)
     usol.append(uh)
     psol.append(ph)
+    print(assemble(jump(uh, n=FacetNormal(mesh))*dS))
 
 File("rhs_test.pvd").write(usol[0], usol[1], psol[0], psol[1])

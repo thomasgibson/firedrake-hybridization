@@ -64,3 +64,5 @@ uc, pc = w2.split()
 
 print(errornorm(project(uh, Vc), uc))
 print(errornorm(ph, pc))
+print(assemble(jump(uh, n=n)*dS))
+print(assemble(jump(uc, n=n)*dS))
