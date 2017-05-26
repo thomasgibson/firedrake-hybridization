@@ -4,7 +4,7 @@ from firedrake import *
 
 mesh = UnitSquareMesh(2, 2)
 
-RT = FiniteElement("RT", triangle, 1)
+RT = FiniteElement("RT", triangle, 2)
 BRT = BrokenElement(RT)
 
 U = FunctionSpace(mesh, RT)
@@ -13,7 +13,7 @@ Ud = FunctionSpace(mesh, BRT)
 x = SpatialCoordinate(mesh)
 fct = as_vector([x[0] ** 2, x[1] ** 2])
 u0 = Function(U).project(fct)
-u = Function(Ud).project(fct)
+u = Function(Ud).project(u0)
 
 ans = Function(U)
 
