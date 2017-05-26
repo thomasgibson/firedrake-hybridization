@@ -3,15 +3,12 @@ from gusto import *
 from firedrake import (IcosahedralSphereMesh, SpatialCoordinate,
                        Constant, as_vector)
 from swe_solver import SWESolver as ShallowWaterSolver
-from hybrid_solver import SWEHybridSolver as HybridSWSolver
-import sys
 
 day = 24.*60.*60
 ref_level = 3
 dt = 3000.
-tmax = 3000.
-hybrid = False
-manual_hybridization = False
+tmax = 3000.*day
+hybrid = True
 
 # Shallow water parameters
 R = 6371220
@@ -73,22 +70,21 @@ advection_dict["u"] = ThetaMethod(state, u0, ueqn)
 advection_dict["D"] = SSPRK3(state, D0, Deqn)
 
 if hybrid:
-    params = {'ksp_type': 'preonly',
+    params = {'ksp_type': 'gmres',
               'ksp_monitor': True,
               'mat_type': 'matfree',
               'pc_type': 'python',
               'hybridization_ksp_monitor': True,
               'pc_python_type': 'firedrake.HybridizationPC',
+              'hybridization_hdiv_residual_ksp_type': 'preonly',
+              'hybridization_hdiv_residual_pc_type': 'lu',
               'hybridization_ksp_type': 'preonly',
               'hybridization_pc_type': 'lu',
               'hybridization_projector_tolerance': 1.0e-14}
 else:
     params = None
 
-if manual_hybridization:
-    linear_solver = HybridSWSolver(state, params=params)
-else:
-    linear_solver = ShallowWaterSolver(state, params=params)
+linear_solver = ShallowWaterSolver(state, params=params)
 
 # Set up forcing
 sw_forcing = ShallowWaterForcing(state)
