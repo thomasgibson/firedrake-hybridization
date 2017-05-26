@@ -4,7 +4,7 @@ from firedrake import *
 
 qflag = False
 degree = 1
-res = 2
+res = 32
 
 mesh = UnitSquareMesh(res, res, quadrilateral=qflag)
 n = FacetNormal(mesh)
@@ -25,14 +25,12 @@ W = V * U
 u, p = TrialFunctions(W)
 v, q = TestFunctions(W)
 
-a = (dot(u, v) + div(v)*p + q*div(u))*dx
+a = (dot(u, v) + div(v)*p + q*div(u) + p*q)*dx
 
 x = SpatialCoordinate(mesh)
 f = Function(U).assign(0)
 
-L = -f*q*dx + 42*dot(v, n)*ds(4)
-
-bcs = [DirichletBC(W.sub(0), Expression(("0", "0")), (1, 2))]
+L = -f*q*dx + 42*dot(v, n)*ds
 
 usol = []
 psol = []
@@ -52,7 +50,7 @@ for hybrid in [False, True]:
         suffix = ""
 
     w = Function(W)
-    solve(a == L, w, bcs=bcs, solver_parameters=params)
+    solve(a == L, w, solver_parameters=params)
     udat, pdat = w.split()
     uh = Function(V, name="velocity"+suffix).assign(udat)
     ph = Function(U, name="pressure"+suffix).assign(pdat)
