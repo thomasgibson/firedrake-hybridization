@@ -70,7 +70,7 @@ advection_dict["u"] = ThetaMethod(state, u0, ueqn)
 advection_dict["D"] = SSPRK3(state, D0, Deqn)
 
 if hybrid:
-    params = {'ksp_type': 'gmres',
+    params = {'ksp_type': 'preonly',
               'ksp_monitor': True,
               'mat_type': 'matfree',
               'pc_type': 'python',
