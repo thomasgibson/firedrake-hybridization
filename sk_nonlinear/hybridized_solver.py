@@ -8,7 +8,7 @@ from firedrake import (split, LinearVariationalProblem,
                        ds_v, ds_t, ds_b, Tensor, assemble,
                        LinearSolver, Projector)
 from gusto.forcing import exner, exner_rho, exner_theta
-from gusto.linear_solver import TimesteppingSolver
+from gusto import TimesteppingSolver
 
 
 class HybridizedCompressibleSolver(TimesteppingSolver):
