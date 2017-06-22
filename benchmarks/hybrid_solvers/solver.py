@@ -84,9 +84,43 @@ class HybridSolver(object):
               solver_parameters=self.params)
         self._reconstruct()
         self._solved = True
+        if self.post_process:
+            self._post_processing()
 
     @property
     def computed_solution(self):
         """
         """
-        return self.conforming_solution.split()
+        if not self.post_process:
+            return self.conforming_solution.split()
+        else:
+            return self.upp
+
+    def _post_processing(self):
+        """
+        """
+        lambdar = self.lambdar_sol
+        u = self.conforming_solution.split()[1]
+        d = u.function_space().ufl_element().degree()
+        Mk1 = FunctionSpace(self.problem.mesh, "DG", d + 1)
+        Tk = self.problem.T
+        u_pp = Function(Mk1)
+        if d < 2:
+            utilde = TrialFunction(Mk1)
+            gammar = TestFunction(Tk)
+            a = inner(utilde, gammar)*dS + inner(utilde, gammar)*ds
+            L = inner(lambdar, gammar)*dS + inner(lambdar, gammar)*ds
+            A = Tensor(a)
+            F = Tensor(L)
+        else:
+            Mk_2 = FunctionSpace(self.problem.mesh, "DG", d - 2)
+            Wk = Mk_2 * Tk
+            utilde = TrialFunction(Mk1)
+            v, gammar = TestFunctions(Wk)
+            a = inner(utilde, v)*dx + inner(utilde, gammar)*dS
+            L = inner(u, v)*dx + inner(lambdar, gammar)*dS
+            A = Tensor(a)
+            F = Tensor(L)
+
+        assemble(A.inv * F, tensor=u_pp)
+        self.upp = u_pp
