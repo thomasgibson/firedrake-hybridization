@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division
 from firedrake import *
+import matplotlib.pyplot as plt
 import numpy as np
 
 
@@ -17,6 +18,7 @@ def poisson_sphere(MeshClass, refinement, hdiv_space):
     f.interpolate(x*y*z)
 
     u_exact = Function(U).interpolate(x*y*z/12.0)
+    sigma_exact = Function(V).project(-grad(x*y*z/12.0))
 
     u, sigma = TrialFunctions(W)
     v, tau = TestFunctions(W)
@@ -34,19 +36,94 @@ def poisson_sphere(MeshClass, refinement, hdiv_space):
                                 'pc_type': 'lu',
                                 'pc_factor_mat_solver_package': 'mumps',
                                 'hdiv_residual': {'ksp_type': 'cg',
+                                                  'ksp_monitor': True,
                                                   'ksp_rtol': 1e-14,
                                                   'pc_type': 'bjacobi',
                                                   'sub_pc_type': 'ilu'},
                                 'use_reconstructor': True}}
     solve(a == L, w, nullspace=nullsp, solver_parameters=params)
-    u_h, _ = w.split()
-    error = errornorm(u_exact, u_h)
-    return w, error
+    u_h, sigma_h = w.split()
+    error_u = errornorm(u_exact, u_h)
+    error_sigma = errornorm(sigma_exact, sigma_h)
+    return error_u, error_sigma
 
-MeshClass = UnitCubedSphereMesh
-refinement = 4
-hdiv_family = "RTCF"
+# MeshClass = UnitCubedSphereMesh
+# refinement = 7
+# hdiv_family = "RTCF"
 
-w, err = poisson_sphere(MeshClass, refinement, hdiv_family)
-print err
-File("poisson_sphere.pvd").write(w.split()[0], w.split()[1])
+# err_u, err_s = poisson_sphere(MeshClass, refinement, hdiv_family)
+# print err_u, err_s
+# File("poisson_sphere.pvd").write(w.split()[0], w.split()[1])
+
+mesh = {"BDM": UnitIcosahedralSphereMesh,
+        "RT": UnitIcosahedralSphereMesh,
+        "RTCF": UnitCubedSphereMesh}
+rterr_u = []
+rterr_sigma = []
+bdmerr_u = []
+bdmerr_sigma = []
+rtcferr_u = []
+rtcferr_sigma = []
+trimesh_cw = []
+cubemesh_cw = []
+for i in range(2, 8):
+    trimesh_cw.append(sqrt((4.0*pi)/mesh["RT"](i).topology.num_cells()))
+    cubemesh_cw.append(sqrt((4.0*pi)/mesh["RTCF"](i).topology.num_cells()))
+    rt_u_err, rt_s_err = poisson_sphere(mesh["RT"], i, "RT")
+    bdm_u_err, bdm_s_err = poisson_sphere(mesh["BDM"], i, "BDM")
+    rtcf_u_err, rtcf_s_err = poisson_sphere(mesh["RTCF"], i, "RTCF")
+
+    rterr_u.append(rt_u_err)
+    rterr_sigma.append(rt_s_err)
+    bdmerr_u.append(bdm_u_err)
+    bdmerr_sigma.append(bdm_s_err)
+    rtcferr_u.append(rtcf_u_err)
+    rtcferr_sigma.append(rtcf_s_err)
+
+rterr_u = np.asarray(rterr_u)
+rterr_sigma = np.asarray(rterr_sigma)
+bdmerr_u = np.asarray(bdmerr_u)
+bdmerr_sigma = np.asarray(bdmerr_sigma)
+rtcferr_u = np.asarray(rtcferr_u)
+rtcferr_sigma = np.asarray(rtcferr_sigma)
+
+fig = plt.figure()
+ax = fig.add_subplot(111)
+
+print "RT EOC for p: %f" % np.log2(rterr_u[:-1]/rterr_u[1:])[-1]
+print "BDM EOC for p: %f" % np.log2(bdmerr_u[:-1]/bdmerr_u[1:])[-1]
+print "RTCF EOC for p: %f" % np.log2(rtcferr_u[:-1]/rtcferr_u[1:])[-1]
+
+print "RT EOC for u: %f" % np.log2(rterr_sigma[:-1]/rterr_sigma[1:])[-1]
+print "BDM EOC for u: %f" % np.log2(bdmerr_sigma[:-1]/bdmerr_sigma[1:])[-1]
+print "RTCF EOC for u: %f" % np.log2(rtcferr_sigma[:-1]/rtcferr_sigma[1:])[-1]
+
+ax.loglog(trimesh_cw, rterr_u, color='r', marker='o',
+          linestyle='-', linewidth='2',
+          label='RT0-DG0-p')
+ax.loglog(trimesh_cw, rterr_sigma, color='r', marker='^',
+          linestyle='-', linewidth='2',
+          label='RT0-DG0-u')
+ax.loglog(trimesh_cw, bdmerr_u, color='r', marker='o',
+          linestyle='--', linewidth='2',
+          label='BDM1-DG0-p')
+ax.loglog(trimesh_cw, bdmerr_sigma, color='r', marker='^',
+          linestyle='--', linewidth='2',
+          label='BDM1-DG0-u')
+ax.loglog(cubemesh_cw, rtcferr_u, color='b', marker='o',
+          linestyle='-', linewidth='2',
+          label='RTCF0-DQ0-p')
+ax.loglog(cubemesh_cw, rtcferr_sigma, color='b', marker='^',
+          label='RTCF0-DQ0-u')
+ax.grid(True)
+plt.title("Resolution test for lowest order H-RT, H-BDM, and H-RTCF methods")
+plt.xlabel("Cell width $\Delta h$")
+plt.ylabel("$L_2$-error")
+plt.gca().invert_xaxis()
+plt.legend(loc=2)
+font = {'family': 'normal',
+        'weight': 'bold',
+        'size': 22}
+plt.rc('font', **font)
+plt.gca().invert_xaxis()
+plt.show()
