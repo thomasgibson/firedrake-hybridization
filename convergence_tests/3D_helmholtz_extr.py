@@ -76,7 +76,7 @@ def run_hybrid_extr_helmholtz(degree, res, quads=False, write=False):
     else:
         return (err_s, err_f), mesh
 
-ref_levels = range(6, 8)
+ref_levels = range(2, 7)
 degree = 0
 errRT_u = []
 errRT_sigma = []
@@ -118,30 +118,40 @@ print "RTCF uerr %f" % errRTCF_sigma[-1]
 print "RTCF p EOC: %f" % np.log2(errRTCF_u[:-1]/errRTCF_u[1:])[-1]
 print "RTCF u EOC: %f" % np.log2(errRTCF_sigma[:-1]/errRTCF_sigma[1:])[-1]
 
-# fig = plt.figure()
-# ax = fig.add_subplot(111)
+fig = plt.figure()
+ax = fig.add_subplot(111)
 
-# res = [2 ** r for r in ref_levels]
+res = [2 ** r for r in ref_levels]
+dh = np.asarray(res)
+dh_arry = dh ** 2
+dh_arry = 0.0001 * dh_arry
 
-# ax.loglog(res, errRT_u, color='r', marker='o',
-#           linestyle='-', linewidth='2',
-#           label='RT0-DG0-p')
-# ax.loglog(res, errRT_sigma, color='r', marker='^',
-#           linestyle='-', linewidth='2',
-#           label='RT0-DG0-u')
-# ax.loglog(res, errRTCF_u, color='b', marker='o',
-#           linestyle='-', linewidth='2',
-#           label='RTCF0-DQ0-p')
-# ax.loglog(res, errRTCF_sigma, color='b', marker='^',
-#           label='RTCF0-DQ0-u')
-# ax.grid(True)
-# plt.title("Resolution test for lowest order H-RT and H-RTCF methods")
-# plt.xlabel("Mesh resolution in all spatial directions $2^r$")
-# plt.ylabel("$L_2$-error")
-# plt.gca().invert_xaxis()
-# plt.legend(loc=1)
-# font = {'family': 'normal',
-#         'weight': 'bold',
-#         'size': 22}
-# plt.rc('font', **font)
-# plt.show()
+orange = '#FF6600'
+lw = '5'
+ms = 15
+
+ax.loglog(res, errRT_u, color='r', marker='o',
+          linestyle='-', linewidth=lw, markersize=ms,
+          label='$DG_0$ $p_h$')
+ax.loglog(res, errRT_sigma, color='b', marker='^',
+          linestyle='-', linewidth=lw, markersize=ms,
+          label='$RT_1$ $u_h$')
+ax.loglog(res, errRTCF_u, color='c', marker='o',
+          linestyle='-', linewidth=lw, markersize=ms,
+          label='$DQ_0$ $p_h$')
+ax.loglog(res, errRTCF_sigma, color=orange, marker='^',
+          linestyle='-', linewidth=lw, markersize=ms,
+          label='$RTCF_1$ $u_h$')
+ax.loglog(res, dh_arry[::-1], color='k', linestyle=':',
+          linewidth=lw, label='$\propto \Delta x^2$')
+ax.grid(True)
+plt.title("Resolution test for lowest order H-RT and H-RTCF methods")
+plt.xlabel("Mesh resolution in all spatial directions $2^r$")
+plt.ylabel("$L^2$-error against projected exact solution")
+plt.gca().invert_xaxis()
+plt.legend(loc=1)
+font = {'family': 'normal',
+        'weight': 'bold',
+        'size': 28}
+plt.rc('font', **font)
+plt.show()
