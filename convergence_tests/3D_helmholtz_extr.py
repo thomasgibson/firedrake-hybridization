@@ -5,6 +5,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+def l2_error(a, b):
+    return sqrt(assemble(inner(a - b, a - b)*dx))
+
+
 def run_hybrid_extr_helmholtz(degree, res, quads=False, write=False):
     nx = 2 ** res
     ny = 2 ** res
@@ -34,12 +38,8 @@ def run_hybrid_extr_helmholtz(degree, res, quads=False, write=False):
     x = SpatialCoordinate(mesh)
     f = Function(U)
     f.interpolate((1+38*pi*pi)*sin(x[0]*pi*2)*sin(x[1]*pi*3)*sin(x[2]*pi*5))
-    exact = Function(U)
-    exact.interpolate(sin(x[0]*pi*2)*sin(x[1]*pi*3)*sin(x[2]*pi*5))
-    exact.rename("exact")
-    exact_flux = Function(V)
-    exact_flux.project(-grad(sin(x[0]*pi*2)*sin(x[1]*pi*3)*sin(x[2]*pi*5)))
-    exact_flux.rename("exact_flux")
+    exact = sin(x[0]*pi*2)*sin(x[1]*pi*3)*sin(x[2]*pi*5)
+    exact_flux = -grad(sin(x[0]*pi*2)*sin(x[1]*pi*3)*sin(x[2]*pi*5))
 
     sigma, u = TrialFunctions(W)
     tau, v = TestFunctions(W)
@@ -67,8 +67,8 @@ def run_hybrid_extr_helmholtz(degree, res, quads=False, write=False):
     sigma_h.rename("flux")
     u_h.rename("pressure")
 
-    err_s = errornorm(u_h, exact)
-    err_f = errornorm(sigma_h, exact_flux)
+    err_s = l2_error(u_h, exact)
+    err_f = l2_error(sigma_h, exact_flux)
 
     if write:
         File("3D-hybrid.pvd").write(sigma_h, u_h, exact, exact_flux)
@@ -76,7 +76,7 @@ def run_hybrid_extr_helmholtz(degree, res, quads=False, write=False):
     else:
         return (err_s, err_f), mesh
 
-ref_levels = range(2, 7)
+ref_levels = range(1, 6)
 degree = 0
 errRT_u = []
 errRT_sigma = []
@@ -123,12 +123,18 @@ ax = fig.add_subplot(111)
 
 res = [2 ** r for r in ref_levels]
 dh = np.asarray(res)
-dh_arry = dh ** 2
-dh_arry = 0.0001 * dh_arry
+k = degree + 1
+dh_arry = dh ** k
+dh_arry = 0.001 * dh_arry
 
 orange = '#FF6600'
 lw = '5'
 ms = 15
+
+if k == 1:
+    dhlabel = '$\propto \Delta x$'
+else:
+    dhlabel = '$\propto \Delta x^%d$' % k
 
 ax.loglog(res, errRT_u, color='r', marker='o',
           linestyle='-', linewidth=lw, markersize=ms,
@@ -143,13 +149,13 @@ ax.loglog(res, errRTCF_sigma, color=orange, marker='^',
           linestyle='-', linewidth=lw, markersize=ms,
           label='$RTCF_1$ $u_h$')
 ax.loglog(res, dh_arry[::-1], color='k', linestyle=':',
-          linewidth=lw, label='$\propto \Delta x^2$')
+          linewidth=lw, label=dhlabel)
 ax.grid(True)
 plt.title("Resolution test for lowest order H-RT and H-RTCF methods")
 plt.xlabel("Mesh resolution in all spatial directions $2^r$")
 plt.ylabel("$L^2$-error against projected exact solution")
 plt.gca().invert_xaxis()
-plt.legend(loc=1)
+plt.legend(loc=2)
 font = {'family': 'normal',
         'weight': 'bold',
         'size': 28}
