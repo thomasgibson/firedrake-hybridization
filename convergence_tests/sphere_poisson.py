@@ -90,6 +90,14 @@ rtcferr_sigma = np.asarray(rtcferr_sigma)
 fig = plt.figure()
 ax = fig.add_subplot(111)
 
+dh = np.asarray(cubemesh_cw)
+dh_arry = dh ** 2
+dh_arry = 0.001 * dh_arry
+
+orange = '#FF6600'
+lw = '5'
+ms = 15
+
 print "RT EOC for p: %f" % np.log2(rterr_u[:-1]/rterr_u[1:])[-1]
 print "BDM EOC for p: %f" % np.log2(bdmerr_u[:-1]/bdmerr_u[1:])[-1]
 print "RTCF EOC for p: %f" % np.log2(rtcferr_u[:-1]/rtcferr_u[1:])[-1]
@@ -99,31 +107,34 @@ print "BDM EOC for u: %f" % np.log2(bdmerr_sigma[:-1]/bdmerr_sigma[1:])[-1]
 print "RTCF EOC for u: %f" % np.log2(rtcferr_sigma[:-1]/rtcferr_sigma[1:])[-1]
 
 ax.loglog(trimesh_cw, rterr_u, color='r', marker='o',
-          linestyle='-', linewidth='2',
-          label='RT0-DG0-p')
-ax.loglog(trimesh_cw, rterr_sigma, color='r', marker='^',
-          linestyle='-', linewidth='2',
-          label='RT0-DG0-u')
-ax.loglog(trimesh_cw, bdmerr_u, color='r', marker='o',
-          linestyle='--', linewidth='2',
-          label='BDM1-DG0-p')
-ax.loglog(trimesh_cw, bdmerr_sigma, color='r', marker='^',
-          linestyle='--', linewidth='2',
-          label='BDM1-DG0-u')
-ax.loglog(cubemesh_cw, rtcferr_u, color='b', marker='o',
-          linestyle='-', linewidth='2',
-          label='RTCF0-DQ0-p')
-ax.loglog(cubemesh_cw, rtcferr_sigma, color='b', marker='^',
-          label='RTCF0-DQ0-u')
+          linestyle='-', linewidth=lw, markersize=ms,
+          label='$RT_1$ $DG_0$ $p_h$')
+ax.loglog(trimesh_cw, rterr_sigma, color='b', marker='^',
+          linestyle='-', linewidth=lw, markersize=ms,
+          label='$RT_1$ $DG_0$ $u_h$')
+ax.loglog(trimesh_cw, bdmerr_u, color='c', marker='o',
+          linestyle='--', linewidth=lw, markersize=ms,
+          label='$BDM_1$ $DG_0$ $p_h$')
+ax.loglog(trimesh_cw, bdmerr_sigma, color=orange, marker='^',
+          linestyle='--', linewidth=lw, markersize=ms,
+          label='$BDM_1$ $DG_0$ $u_h$')
+ax.loglog(cubemesh_cw, rtcferr_u, color='g', marker='o',
+          linewidth=lw, markersize=ms,
+          label='$RTCF_1$ $DQ_0$ $p_h$')
+ax.loglog(cubemesh_cw, rtcferr_sigma, color='m', marker='^',
+          linewidth=lw, markersize=ms,
+          label='$RTCF_1$ $DQ_0$ $u_h$')
+ax.loglog(trimesh_cw, dh_arry, color='k', linestyle=':',
+          linewidth=lw, label='$\propto \Delta h^2$')
 ax.grid(True)
-plt.title("Resolution test for lowest order H-RT, H-BDM, and H-RTCF methods")
+plt.title("Resolution test for LO H-RT, H-BDM, and H-RTCF methods")
 plt.xlabel("Cell width $\Delta h$")
-plt.ylabel("$L_2$-error")
+plt.ylabel("$L^2$-error against projected exact solution")
 plt.gca().invert_xaxis()
 plt.legend(loc=2)
 font = {'family': 'normal',
         'weight': 'bold',
-        'size': 22}
+        'size': 28}
 plt.rc('font', **font)
 plt.gca().invert_xaxis()
 plt.show()
