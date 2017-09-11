@@ -48,18 +48,18 @@ def run_hybrid_extr_helmholtz(degree, res, quads=False, write=False):
     L = f*v*dx
     w = Function(W)
     params = {'ksp_type': 'preonly',
+              # 'ksp_monitor_true_residual': True,
               'mat_type': 'matfree',
               'pc_type': 'python',
               'pc_python_type': 'firedrake.HybridizationPC',
               'hybridization': {'ksp_type': 'cg',
                                 'pc_type': 'hypre',
                                 'pc_hypre_type': 'boomeramg',
-                                'ksp_rtol': 1e-8,
+                                'ksp_rtol': 1e-14,
                                 'ksp_monitor': True,
                                 'hdiv_residual': {'ksp_type': 'cg',
                                                   'pc_type': 'bjacobi',
                                                   'sub_pc_type': 'ilu',
-                                                  'ksp_rtol': 1e-8,
                                                   'ksp_monitor': True},
                                 'use_reconstructor': True}}
     solve(a == L, w, solver_parameters=params)
@@ -76,7 +76,7 @@ def run_hybrid_extr_helmholtz(degree, res, quads=False, write=False):
     else:
         return (err_s, err_f), mesh
 
-ref_levels = range(1, 6)
+ref_levels = range(2, 6)
 degree = 0
 errRT_u = []
 errRT_sigma = []
@@ -106,29 +106,29 @@ errRTCF_sigma = np.asarray(errRTCF_sigma)
 rtdof = mRT[-1].topology.num_cells()*6
 rtcfdof = mRTCF[-1].topology.num_cells()*7
 
-print "RT Dof count: %d" % rtdof
-print "RT perr: %f" % errRT_u[-1]
-print "RT uerr: %f" % errRT_sigma[-1]
-print "RT p EOC: %f" % np.log2(errRT_u[:-1]/errRT_u[1:])[-1]
-print "RT u EOC: %f" % np.log2(errRT_sigma[:-1]/errRT_sigma[1:])[-1]
+print("RT Dof count: %d" % rtdof)
+print("RT perr: %f" % errRT_u[-1])
+print("RT uerr: %f" % errRT_sigma[-1])
+print("RT p EOC: %f" % np.log2(errRT_u[:-1]/errRT_u[1:])[-1])
+print("RT u EOC: %f" % np.log2(errRT_sigma[:-1]/errRT_sigma[1:])[-1])
 
-print "RTCF Dof count: %d" % rtcfdof
-print "RTCF perr %f" % errRTCF_u[-1]
-print "RTCF uerr %f" % errRTCF_sigma[-1]
-print "RTCF p EOC: %f" % np.log2(errRTCF_u[:-1]/errRTCF_u[1:])[-1]
-print "RTCF u EOC: %f" % np.log2(errRTCF_sigma[:-1]/errRTCF_sigma[1:])[-1]
+print("RTCF Dof count: %d" % rtcfdof)
+print("RTCF perr %f" % errRTCF_u[-1])
+print("RTCF uerr %f" % errRTCF_sigma[-1])
+print("RTCF p EOC: %f" % np.log2(errRTCF_u[:-1]/errRTCF_u[1:])[-1])
+print("RTCF u EOC: %f" % np.log2(errRTCF_sigma[:-1]/errRTCF_sigma[1:])[-1])
 
 fig = plt.figure()
 ax = fig.add_subplot(111)
 
 res = [2 ** r for r in ref_levels]
-dh = np.asarray(res)
+dh = np.array(res)
 k = degree + 1
-dh_arry = dh ** k
+dh_arry = dh
 dh_arry = 0.001 * dh_arry
 
 orange = '#FF6600'
-lw = '5'
+lw = 5
 ms = 15
 
 if k == 1:
@@ -160,4 +160,5 @@ font = {'family': 'normal',
         'weight': 'bold',
         'size': 28}
 plt.rc('font', **font)
+plt.axis('scaled')
 plt.show()
