@@ -2,7 +2,7 @@ from __future__ import absolute_import, division
 
 from firedrake import *
 import numpy as np
-import matplotlib.pyplot as plt
+import csv
 
 
 def l2_error(a, b):
@@ -103,62 +103,31 @@ errRT_u = np.asarray(errRT_u)
 errRT_sigma = np.asarray(errRT_sigma)
 errRTCF_u = np.asarray(errRTCF_u)
 errRTCF_sigma = np.asarray(errRTCF_sigma)
-rtdof = mRT[-1].topology.num_cells()*6
-rtcfdof = mRTCF[-1].topology.num_cells()*7
+# rtdof = mRT[-1].topology.num_cells()*6
+# rtcfdof = mRTCF[-1].topology.num_cells()*7
 
-print("RT Dof count: %d" % rtdof)
-print("RT perr: %f" % errRT_u[-1])
-print("RT uerr: %f" % errRT_sigma[-1])
-print("RT p EOC: %f" % np.log2(errRT_u[:-1]/errRT_u[1:])[-1])
-print("RT u EOC: %f" % np.log2(errRT_sigma[:-1]/errRT_sigma[1:])[-1])
+RT_u_rates = np.log2(errRT_u[:-1]/errRT_u[1:])
+RT_sigma_rates = np.log2(errRT_sigma[:-1]/errRT_sigma[1:])
 
-print("RTCF Dof count: %d" % rtcfdof)
-print("RTCF perr %f" % errRTCF_u[-1])
-print("RTCF uerr %f" % errRTCF_sigma[-1])
-print("RTCF p EOC: %f" % np.log2(errRTCF_u[:-1]/errRTCF_u[1:])[-1])
-print("RTCF u EOC: %f" % np.log2(errRTCF_sigma[:-1]/errRTCF_sigma[1:])[-1])
+RTCF_u_rates = np.log2(errRTCF_u[:-1]/errRTCF_u[1:])
+RTCF_sigma_rates = np.log2(errRTCF_sigma[:-1]/errRTCF_sigma[1:])
 
-fig = plt.figure()
-ax = fig.add_subplot(111)
 
+fieldnames = ('resolution',
+              'RT_u_rates',
+              'RT_sigma_rates',
+              'RTCF_u_rates',
+              'RTCF_sigma_rates',
+              'dh')
 res = [2 ** r for r in ref_levels]
 dh = np.array(res)
 k = degree + 1
-dh_arry = dh
-dh_arry = 0.001 * dh_arry
-
-orange = '#FF6600'
-lw = 5
-ms = 15
-
-if k == 1:
-    dhlabel = '$\propto \Delta x$'
-else:
-    dhlabel = '$\propto \Delta x^%d$' % k
-
-ax.loglog(res, errRT_u, color='r', marker='o',
-          linestyle='-', linewidth=lw, markersize=ms,
-          label='$DG_0$ $p_h$')
-ax.loglog(res, errRT_sigma, color='b', marker='^',
-          linestyle='-', linewidth=lw, markersize=ms,
-          label='$RT_1$ $u_h$')
-ax.loglog(res, errRTCF_u, color='c', marker='o',
-          linestyle='-', linewidth=lw, markersize=ms,
-          label='$DQ_0$ $p_h$')
-ax.loglog(res, errRTCF_sigma, color=orange, marker='^',
-          linestyle='-', linewidth=lw, markersize=ms,
-          label='$RTCF_1$ $u_h$')
-ax.loglog(res, dh_arry[::-1], color='k', linestyle=':',
-          linewidth=lw, label=dhlabel)
-ax.grid(True)
-plt.title("Resolution test for lowest order H-RT and H-RTCF methods")
-plt.xlabel("Mesh resolution in all spatial directions $2^r$")
-plt.ylabel("$L^2$-error against projected exact solution")
-plt.gca().invert_xaxis()
-plt.legend(loc=2)
-font = {'family': 'normal',
-        'weight': 'bold',
-        'size': 28}
-plt.rc('font', **font)
-plt.axis('scaled')
-plt.show()
+dh_arry = 0.001 * dh
+data = [res, RT_u_rates, RT_sigma_rates,
+        RTCF_u_rates, RTCF_sigma_rates, dh_arry]
+csv_file = open('3d_helmholtz.csv', 'w')
+csvwriter = csv.writer(csv_file)
+csvwriter.writerow(fieldnames)
+for data in zip(*data):
+    csvwriter.writerow(data)
+csv_file.close()
