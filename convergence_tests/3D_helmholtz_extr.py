@@ -70,12 +70,15 @@ def run_hybrid_extr_helmholtz(degree, res, quads=False, write=False):
     err_s = l2_error(u_h, exact)
     err_f = l2_error(sigma_h, exact_flux)
 
+    dof_count = mesh.topology.num_cells() * W.dof_count[1]
+
     if write:
         File("3D-hybrid.pvd").write(sigma_h, u_h, exact, exact_flux)
         return
     else:
-        return (err_s, err_f), mesh
+        return (err_s, err_f), dof_count
 
+# Max local res is 7 (for degree = 0)
 ref_levels = range(1, 7)
 degree = 0
 errRT_u = []
@@ -85,15 +88,16 @@ errRTCF_sigma = []
 mRT = []
 mRTCF = []
 for i in ref_levels:
-    e, mrt = run_hybrid_extr_helmholtz(degree=degree,
-                                       res=i, quads=False)
+    e, dof_tri = run_hybrid_extr_helmholtz(degree=degree,
+                                           res=i, quads=False)
     rt_err_s, rt_err_f = e
-    ertc, mrtcf = run_hybrid_extr_helmholtz(degree=degree,
-                                            res=i, quads=True)
+
+    ertc, dof_quad = run_hybrid_extr_helmholtz(degree=degree,
+                                               res=i, quads=True)
     rtcf_err_s, rtcf_err_f = ertc
 
-    mRT.append(mrt)
-    mRTCF.append(mrtcf)
+    mRT.append(dof_tri)
+    mRTCF.append(dof_quad)
     errRT_u.append(rt_err_s)
     errRT_sigma.append(rt_err_f)
     errRTCF_u.append(rtcf_err_s)
@@ -103,8 +107,6 @@ errRT_u = np.asarray(errRT_u)
 errRT_sigma = np.asarray(errRT_sigma)
 errRTCF_u = np.asarray(errRTCF_u)
 errRTCF_sigma = np.asarray(errRTCF_sigma)
-# rtdof = mRT[-1].topology.num_cells()*6
-# rtcfdof = mRTCF[-1].topology.num_cells()*7
 
 # RT_u_rates = np.array(errRT_u[:-1]/errRT_u[1:])
 # RT_sigma_rates = np.array(errRT_sigma[:-1]/errRT_sigma[1:])
@@ -113,22 +115,28 @@ errRTCF_sigma = np.asarray(errRTCF_sigma)
 # RTCF_sigma_rates = np.array(errRTCF_sigma[:-1]/errRTCF_sigma[1:])
 
 
-fieldnames = ['resolution',
+fieldnames = ['dof_count_rt',
+              'dof_count_rtcf',
               'RT_u_err',
               'RT_sigma_err',
               'RTCF_u_err',
               'RTCF_sigma_err',
-              'dh']
-res = [2 ** r for r in ref_levels]
-dh = np.array(res)[::-1]
+              'dh_rt',
+              'dh_rtcf']
+res = [1/(2 ** r) for r in ref_levels]
+dh = np.array(res)
 k = degree + 1
-dh_arry = 0.001 * dh
-data = [res,
+dh = dh ** k
+dh_arry_rt = 2 * dh
+dh_arry_rtcf = 2 * dh
+data = [mRT,
+        mRTCF,
         errRT_u,
         errRT_sigma,
         errRTCF_u,
         errRTCF_sigma,
-        dh_arry]
+        dh_arry_rt,
+        dh_arry_rtcf]
 csv_file = open('3d_helmholtz.csv', 'w')
 csvwriter = csv.writer(csv_file)
 csvwriter.writerow(fieldnames)
