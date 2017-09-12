@@ -5,21 +5,21 @@
 
 \begin{tikzpicture}
 	\begin{loglogaxis}[%
-	name=plot1,
-	title={\textbf{Log-log Plot 1}},
-	xlabel=\textsc{Dof}, ylabel={$L_2$ Error}]
-	\addplot table [x=dof_count_rt, y=RT_u_err, col sep=comma] {3d_helmholtz.csv};
-	\addplot table [x=dof_count_rt, y=RT_sigma_err, col sep=comma] {3d_helmholtz.csv};
-	\addplot [dashed,black] table [x=dof_count_rt, y=dh_rt, col sep=comma] {3d_helmholtz.csv};
-	\legend{$d=2$\\$d=3$\\$d=4$\\}
+		name=plot1,
+		title={\textbf{Log-log Plot 1}},
+		xlabel=\textsc{Dof}, ylabel={$L_2$ Error}]
+		\addplot table [x=dof_count_rt, y=RT_u_err, col sep=comma] {3d_helmholtz.csv};
+		\addplot table [x=dof_count_rt, y=RT_sigma_err, col sep=comma] {3d_helmholtz.csv};
+		\addplot [dashed,black] table [x=dof_count_rt, y=dh_rt, col sep=comma] {3d_helmholtz.csv};
+		\legend{$d=2$\\$d=3$\\$d=4$\\}
 	\end{loglogaxis}
 \end{tikzpicture}
 \newline
 \begin{tikzpicture}
 	\begin{loglogaxis}[%
 		name=plot2,
-		at=(plot1.right of south east),
-		anchor=left of south west,
+%		at=(plot1.right of south east),
+%		anchor=left of south west,
 		title={\textbf{Log-log Plot 2}},
 		xlabel=\textsc{Dof}, ylabel={$L_2$ Error}]
 		\addplot table [x=dof_count_rtcf, y=RTCF_u_err, col sep=comma] {3d_helmholtz.csv};
