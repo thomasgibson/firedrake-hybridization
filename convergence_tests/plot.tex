@@ -1,0 +1,16 @@
+\documentclass{article}
+\usepackage{pgfplots}
+
+\begin{document}
+\begin{tikzpicture}
+	\begin{loglogaxis}[title={\textbf{Log-log Plot}},
+		xlabel=\textsc{Dof}, ylabel={$L_2$ Error} ]
+		\addplot table [x=resolution, y=RT_u_err, col sep=comma] {3d_helmholtz.csv};
+		\addplot table [x=resolution, y=RT_sigma_err, col sep=comma] {3d_helmholtz.csv};
+		\addplot table [x=resolution, y=RTCF_u_err, col sep=comma] {3d_helmholtz.csv};
+		\addplot table [x=resolution, y=RTCF_sigma_err, col sep=comma] {3d_helmholtz.csv};
+		\addplot [dashed,black] table [x=resolution, y=dh, col sep=comma] {3d_helmholtz.csv};
+		\legend{$d=2$\\$d=3$\\$d=4$\\$d=5$\\$d=6$\\}
+	\end{loglogaxis}
+\end{tikzpicture}
+\end{document}
