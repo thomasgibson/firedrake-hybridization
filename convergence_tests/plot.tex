@@ -21,20 +21,21 @@
 	]
 	\hspace{-1.5cm}
 	\nextgroupplot[%
-	title={$RT_0 \times DG_0$},
+	title={LO RT Method (triangular prisms)},
 	ylabel={\textsc{$L_2$ Error}},
 	xlabel={\textsc{Cell volume $h$}},
 	ymode=log,
 	xmode=log,
 	legend pos=outer north east
 	]
-	\addplot table [x=cell_vol_rt, y=RT_u_err, col sep=comma] {3d_helmholtz_d1.csv};
-	\addplot table [x=cell_vol_rt, y=RT_sigma_err, col sep=comma] {3d_helmholtz_d1.csv};
+	\addplot [mark=triangle*, color=blue] table [x=cell_vol_rt, y=RT_u_err, col sep=comma] {3d_helmholtz_d1.csv};
+	\addplot [mark=triangle*, color=red] table [x=cell_vol_rt, y=RT_sigma_err, col sep=comma]
+	{3d_helmholtz_d1.csv};
 	\addplot [dashed,black] table [x=cell_vol_rt, y=dh_rt, col sep=comma] {3d_helmholtz_d1.csv};
 	\legend{$u_h$\\$p_h$\\$\propto h$\\}
 	
 	\nextgroupplot[%
-	title={$RTCF_0 \times DQ_0$},
+	title={LO RT Method (hexahedra)},
 	xshift=2cm,
 	xlabel={\textsc{Cell volume $h$}},
 	ymode=log,
@@ -43,13 +44,13 @@
 	]
 	\addplot [mark=square*, color=purple] table [x=cell_vol_rtcf, y=RTCF_u_err, col sep=comma]
 	{3d_helmholtz_d1.csv};
-	\addplot [mark=*, color=orange] table [x=cell_vol_rtcf, y=RTCF_sigma_err, col sep=comma]
+	\addplot [mark=square*, color=orange] table [x=cell_vol_rtcf, y=RTCF_sigma_err, col sep=comma]
 	{3d_helmholtz_d1.csv};
 	\addplot [dashed,black] table [x=cell_vol_rtcf, y=dh_rtcf, col sep=comma] {3d_helmholtz_d1.csv};
 	\legend{$u_h$\\$p_h$\\$\propto h$\\}
 
 	\nextgroupplot[%
-	title={$RT_1 \times DG_1$},
+	title={NLO RT Method (triangular prisms)},
 	yshift=-1cm,
 	ylabel={\textsc{$L_2$ Error}},
 	xlabel={\textsc{Cell volume $h$}},
@@ -57,13 +58,14 @@
 	xmode=log,
 	legend pos=outer north east
 	]
-	\addplot table [x=cell_vol_rt, y=RT_u_err, col sep=comma] {3d_helmholtz_d2.csv};
-	\addplot table [x=cell_vol_rt, y=RT_sigma_err, col sep=comma] {3d_helmholtz_d2.csv};
+	\addplot [mark=triangle*, color=blue] table [x=cell_vol_rt, y=RT_u_err, col sep=comma] {3d_helmholtz_d2.csv};
+	\addplot [mark=triangle*, color=red] table [x=cell_vol_rt, y=RT_sigma_err, col sep=comma]
+	{3d_helmholtz_d2.csv};
 	\addplot [dashed,black] table [x=cell_vol_rt, y=dh_rt, col sep=comma] {3d_helmholtz_d2.csv};
 	\legend{$u_h$\\$p_h$\\$\propto h^2$\\}
 
 	\nextgroupplot[%
-	title={$RTCF_1 \times DQ_1$},
+	title={NLO RT Method (hexahedra)},
 	yshift=-1cm,
 	%xshift=2cm,
 	xlabel={\textsc{Cell volume $h$}},
@@ -73,7 +75,7 @@
 	]
 	\addplot [mark=square*, color=purple] table [x=cell_vol_rtcf, y=RTCF_u_err, col sep=comma]
 	{3d_helmholtz_d2.csv};
-	\addplot [mark=*, color=orange] table [x=cell_vol_rtcf, y=RTCF_sigma_err, col sep=comma]
+	\addplot [mark=square*, color=orange] table [x=cell_vol_rtcf, y=RTCF_sigma_err, col sep=comma]
 	{3d_helmholtz_d2.csv};
 	\addplot [dashed,black] table [x=cell_vol_rtcf, y=dh_rtcf, col sep=comma] {3d_helmholtz_d2.csv};
 	\legend{$u_h$\\$p_h$\\$\propto h^2$\\}
