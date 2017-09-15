@@ -80,9 +80,9 @@ def run_hybrid_extr_helmholtz(degree, res, quads=False, write=False):
     else:
         return (err_s, err_f), vol
 
-# Max local res is 7 (for degree = 0)
+# Max local res is 6 for both LO and NLO
 ref_levels = range(1, 6)
-degree = 0
+degree = 1
 errRT_u = []
 errRT_sigma = []
 errRTCF_u = []
@@ -122,8 +122,8 @@ res = [1/(2 ** r) for r in ref_levels]
 dh = np.array(res)
 k = degree + 1
 dh = dh ** k
-dh_arry_rt = 2 * dh
-dh_arry_rtcf = 2 * dh
+dh_arry_rt = 2 * k * dh
+dh_arry_rtcf = 2 * k * dh
 data = [volRT,
         volRTCF,
         errRT_u,
