@@ -4,45 +4,82 @@
 
 \begin{document}
 
-\begin{tikzpicture}
+\begin{figure}[!h]
+	\centering
+	\begin{tikzpicture}
 	\begin{groupplot}[%
-		group style={group name={Plots 1},
-					 group size=2 by 2,
-					 ylabels at=edge left},
-		footnotesize,
-		%width=6cm,
-		%height=6cm,
-		tickpos=left,
-		%ytick align=outside,
-		%xtick align=outside,
-		enlarge x limits=false
-		]
+	group style={group name={Plots 1},
+		group size=2 by 2,
+		ylabels at=edge left},
+	small,
+	%width=6cm,
+	%height=6cm,
+	tickpos=left,
+	%ytick align=outside,
+	%xtick align=outside,
+	enlarge x limits=false
+	]
+	\hspace{-1.5cm}
 	\nextgroupplot[%
-		title={$p=1$},
-		ylabel={$L_2$ Error},
-		xlabel={\textsc{Dof}},
-		ymode=log,
-		xmode=log,
-		legend pos=outer north east
-		]
-		\addplot table [x=dof_count_rt, y=RT_u_err, col sep=comma] {3d_helmholtz.csv};
-		\addplot table [x=dof_count_rt, y=RT_sigma_err, col sep=comma] {3d_helmholtz.csv};
-		\addplot [dashed,black] table [x=dof_count_rt, y=dh_rt, col sep=comma] {3d_helmholtz.csv};
-		\legend{$d=2$\\$d=3$\\$d=4$\\}
+	title={$RT_0 \times DG_0$},
+	ylabel={\textsc{$L_2$ Error}},
+	xlabel={\textsc{Cell volume $h$}},
+	ymode=log,
+	xmode=log,
+	legend pos=outer north east
+	]
+	\addplot table [x=cell_vol_rt, y=RT_u_err, col sep=comma] {3d_helmholtz_d1.csv};
+	\addplot table [x=cell_vol_rt, y=RT_sigma_err, col sep=comma] {3d_helmholtz_d1.csv};
+	\addplot [dashed,black] table [x=cell_vol_rt, y=dh_rt, col sep=comma] {3d_helmholtz_d1.csv};
+	\legend{$u_h$\\$p_h$\\$\propto h$\\}
+	
+	\nextgroupplot[%
+	title={$RTCF_0 \times DQ_0$},
+	xshift=2cm,
+	xlabel={\textsc{Cell volume $h$}},
+	ymode=log,
+	xmode=log,
+	legend pos=outer north east
+	]
+	\addplot [mark=square*, color=purple] table [x=cell_vol_rtcf, y=RTCF_u_err, col sep=comma]
+	{3d_helmholtz_d1.csv};
+	\addplot [mark=*, color=orange] table [x=cell_vol_rtcf, y=RTCF_sigma_err, col sep=comma]
+	{3d_helmholtz_d1.csv};
+	\addplot [dashed,black] table [x=cell_vol_rtcf, y=dh_rtcf, col sep=comma] {3d_helmholtz_d1.csv};
+	\legend{$u_h$\\$p_h$\\$\propto h$\\}
 
 	\nextgroupplot[%
-		title={$p=2$},
-		xshift=2cm,
-		xlabel={\textsc{Dof}},
-		ymode=log,
-		xmode=log,
-		legend pos=outer north east
-		]
-		\addplot table [x=dof_count_rtcf, y=RTCF_u_err, col sep=comma] {3d_helmholtz.csv};
-		\addplot table [x=dof_count_rtcf, y=RTCF_sigma_err, col sep=comma] {3d_helmholtz.csv};
-		\addplot [dashed,black] table [x=dof_count_rtcf, y=dh_rtcf, col sep=comma] {3d_helmholtz.csv};
-		\legend{$d=2$\\$d=3$\\$d=4$\\}
+	title={$RT_1 \times DG_1$},
+	yshift=-1cm,
+	ylabel={\textsc{$L_2$ Error}},
+	xlabel={\textsc{Cell volume $h$}},
+	ymode=log,
+	xmode=log,
+	legend pos=outer north east
+	]
+	\addplot table [x=cell_vol_rt, y=RT_u_err, col sep=comma] {3d_helmholtz_d2.csv};
+	\addplot table [x=cell_vol_rt, y=RT_sigma_err, col sep=comma] {3d_helmholtz_d2.csv};
+	\addplot [dashed,black] table [x=cell_vol_rt, y=dh_rt, col sep=comma] {3d_helmholtz_d2.csv};
+	\legend{$u_h$\\$p_h$\\$\propto h^2$\\}
+
+	\nextgroupplot[%
+	title={$RTCF_1 \times DQ_1$},
+	yshift=-1cm,
+	%xshift=2cm,
+	xlabel={\textsc{Cell volume $h$}},
+	ymode=log,
+	xmode=log,
+	legend pos=outer north east
+	]
+	\addplot [mark=square*, color=purple] table [x=cell_vol_rtcf, y=RTCF_u_err, col sep=comma]
+	{3d_helmholtz_d2.csv};
+	\addplot [mark=*, color=orange] table [x=cell_vol_rtcf, y=RTCF_sigma_err, col sep=comma]
+	{3d_helmholtz_d2.csv};
+	\addplot [dashed,black] table [x=cell_vol_rtcf, y=dh_rtcf, col sep=comma] {3d_helmholtz_d2.csv};
+	\legend{$u_h$\\$p_h$\\$\propto h^2$\\}
 	\end{groupplot}
-\end{tikzpicture}
+	\end{tikzpicture}
+	\caption{Convergence plots.}
+\end{figure}
 
 \end{document}
