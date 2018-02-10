@@ -4,31 +4,87 @@ Credit for demo setup: Gusto development team
 from gusto import *
 import itertools
 from firedrake import as_vector, SpatialCoordinate, PeriodicIntervalMesh, \
-    ExtrudedMesh, exp, sin, Function
+    ExtrudedMesh, exp, sin, Function, parameters
+from firedrake.petsc import PETSc
+from argparse import ArgumentParser
 from hybridization import HybridizedCompressibleSolver
 import numpy as np
 import sys
 
-if '--run-test' in sys.argv:
-    dt = 6.
-    delta = 2000.
-    tmax = dt
-else:
-    # delta/dt combinations:
-    # delta = 2000., dt = 6;
-    # delta = 1000., dt = 5;
-    # delta = 500., dt = 4;
-    # delta = 250., dt = 3;
-    # delta = 125., dt = 2;
-    dt = 5.
-    delta = 1000.
+
+# Given a delta, return appropriate dt
+delta_dt = {62.5: 1.,
+            125.: 2.,
+            250.: 3.,
+            500.: 4.,
+            1000.: 5.,
+            2000.: 6.}
+
+PETSc.Log.begin()
+parser = ArgumentParser(description="""Nonhydrostatic gravity wave test by Skamarock and Klemp (1994).""",
+                        add_help=False)
+
+parser.add_argument("--delta",
+                    default=2000.0,
+                    type=float,
+                    choices=[2000.0, 1000.0, 500.0, 250.0, 125.0, 62.5],
+                    help="Resolution for the simulation.")
+
+parser.add_argument("--hybridization",
+                    action="store_true",
+                    help="Use a hybridized compressible solver.")
+
+parser.add_argument("--test",
+                    action="store_true",
+                    help="Enable a quick test run.")
+
+parser.add_argument("--profile",
+                    action="store_true",
+                    help="Turn on profiling for a 20 time-step run.")
+
+parser.add_argument("--dumpfreq",
+                    default=5,
+                    type=int,
+                    action="store",
+                    help="Dump frequency of output files.")
+
+parser.add_argument("--help",
+                    action="store_true",
+                    help="Show help.")
+
+args, _ = parser.parse_known_args()
+
+if args.help:
+    help = parser.format_help()
+    PETSc.Sys.Print("%s\n" % help)
+    sys.exit(1)
+
+if args.profile:
+    # Ensures accurate timing of parallel loops
+    parameters["pyop2_options"]["lazy_evaluation"] = False
+    tmax = 20*delta_dt[args.delta]
+
+if args.test:
+    tmax = delta_dt[args.delta]
+
+if not args.test and not args.profile:
     tmax = 3600.
 
-if '--hybrid' in sys.argv:
-    hybrid = True
-else:
-    hybrid = False
+delta = args.delta
+dt = delta_dt[delta]
+hybrid = bool(args.hybridization)
+PETSc.Sys.Print("""
+Problem parameters:\n
+Test case: Skamarock and Klemp gravity wave.\n
+Hybridized compressible solver: %s,\n
+delta: %s,\n
+Profiling: %s,\n
+Test run: %s,\n
+Dump frequency: %s.\n
+""" % (hybrid, delta, bool(args.profile), bool(args.test), args.dumpfreq))
 
+PETSc.Sys.Print("Initializing problem with dt: %s and tmax: %s.\n" % (dt,
+                                                                      tmax))
 H = 1.0e4  # Height position of the model top
 L = 3.0e5
 
@@ -45,7 +101,15 @@ points = np.array([p for p in itertools.product(points_x, points_z)])
 
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname='sk_nonlinear', dumpfreq=1, dumplist=['u'],
+
+if hybrid:
+    dirname = 'hybrid_sk_nonlinear_dx%s_dt%s' % (delta, dt)
+else:
+    dirname = 'sk_nonlinear_dx%s_dt%s' % (delta, dt)
+
+output = OutputParameters(dirname=dirname,
+                          dumpfreq=args.dumpfreq,
+                          dumplist=['u'],
                           perturbation_fields=['theta', 'rho'],
                           point_data=[('theta_perturbation', points)])
 parameters = CompressibleParameters()
@@ -108,9 +172,11 @@ state.set_reference_profiles([('rho', rho_b),
 # Set up advection schemes
 ueqn = EulerPoincare(state, Vu)
 rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
+
 supg = True
 if supg:
-    thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction": "horizontal"},
+    thetaeqn = SUPGAdvection(state, Vt,
+                             supg_params={"dg_direction": "horizontal"},
                              equation_form="advective")
 else:
     thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
@@ -129,8 +195,9 @@ else:
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
 
-# build time stepper
+# Build time stepper
 stepper = CrankNicolson(state, advected_fields, linear_solver,
                         compressible_forcing)
 
+PETSc.Sys.Print("Starting simulation...\n")
 stepper.run(t=0, tmax=tmax)

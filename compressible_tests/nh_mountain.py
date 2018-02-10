@@ -4,29 +4,97 @@ Credit for demo setup: Gusto development team
 from gusto import *
 from firedrake import FunctionSpace, as_vector, \
     VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, exp, pi, cos, Function, conditional, Mesh, sin, op2
+    SpatialCoordinate, exp, pi, cos, Function, conditional, Mesh, sin, \
+    op2, parameters
+from firedrake.petsc import PETSc
+from argparse import ArgumentParser
 from hybridization import HybridizedCompressibleSolver
 import sys
 
-dt = 5.0
-if '--run-test' in sys.argv:
-    tmax = dt
-else:
+
+# Given a delta, return appropriate dt
+delta_dt = {62.5: 1.,
+            125.: 2.,
+            250.: 3.,
+            500.: 4.,
+            1000.: 5.,
+            2000.: 6.}
+
+PETSc.Log.begin()
+parser = ArgumentParser(description="""Gravity wave mountain test by Schar et al (2002).""",
+                        add_help=False)
+
+parser.add_argument("--delta",
+                    default=1000.0,
+                    type=float,
+                    choices=[2000.0, 1000.0, 500.0, 250.0, 125.0, 62.5],
+                    help="Resolution for the simulation.")
+
+parser.add_argument("--hybridization",
+                    action="store_true",
+                    help="Use a hybridized compressible solver.")
+
+parser.add_argument("--test",
+                    action="store_true",
+                    help="Enable a quick test run.")
+
+parser.add_argument("--profile",
+                    action="store_true",
+                    help="Turn on profiling for a 20 time-step run.")
+
+parser.add_argument("--dumpfreq",
+                    default=18,
+                    type=int,
+                    action="store",
+                    help="Dump frequency of output files.")
+
+parser.add_argument("--help",
+                    action="store_true",
+                    help="Show help.")
+
+args, _ = parser.parse_known_args()
+
+if args.help:
+    help = parser.format_help()
+    PETSc.Sys.Print("%s\n" % help)
+    sys.exit(1)
+
+if args.profile:
+    # Ensures accurate timing of parallel loops
+    parameters["pyop2_options"]["lazy_evaluation"] = False
+    tmax = 20*delta_dt[args.delta]
+
+if args.test:
+    tmax = delta_dt[args.delta]
+
+if not args.test and not args.profile:
     tmax = 9000.
 
-if '--hybrid' in sys.argv:
-    hybrid = True
-else:
-    hybrid = False
+delta = args.delta
+dt = delta_dt[delta]
+hybrid = bool(args.hybridization)
+PETSc.Sys.Print("""
+Problem parameters:\n
+Test case: Gravity wave over a Schar-type mountain.\n
+Hybridized compressible solver: %s,\n
+delta: %s,\n
+Profiling: %s,\n
+Test run: %s,\n
+Dump frequency: %s.\n
+""" % (hybrid, delta, bool(args.profile), bool(args.test), args.dumpfreq))
 
-nlayers = 70  # horizontal layers
-columns = 180  # number of columns
-L = 144000.
-m = PeriodicIntervalMesh(columns, L)
-
-# build volume mesh
+PETSc.Sys.Print("Initializing problem with dt: %s and tmax: %s.\n" % (dt,
+                                                                      tmax))
 H = 35000.  # Height position of the model top
+L = 144000.
+nlayers = int(2*H/delta)  # horizontal layers
+columns = int(1.25*L/delta)  # number of columns
+
+PETSc.Sys.Print("Creating mesh with %s columns and %s layers...\n" % (columns,
+                                                                      nlayers))
+m = PeriodicIntervalMesh(columns, L)
 ext_mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
+
 Vc = VectorFunctionSpace(ext_mesh, "DG", 2)
 coord = SpatialCoordinate(ext_mesh)
 x = Function(Vc).interpolate(as_vector([coord[0], coord[1]]))
@@ -35,6 +103,7 @@ xc = L/2.
 x, z = SpatialCoordinate(ext_mesh)
 hm = 1.
 zs = hm*a**2/((x-xc)**2 + a**2)
+
 smooth_z = True
 if smooth_z:
     zh = 5000.
@@ -53,8 +122,15 @@ mu_top = conditional(z <= zc, 0.0, mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
 mu = Function(W_DG).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
-output = OutputParameters(dirname='nh_mountain_smootherz',
-                          dumpfreq=18, dumplist=['u'],
+
+if hybrid:
+    dirname = "hybrid_nh_mountain_smootherz_dx%s_dt%s" % (delta, dt)
+else:
+    dirname = "nh_mountain_smootherz_dx%s_dt%s" % (delta, dt)
+
+output = OutputParameters(dirname=dirname,
+                          dumpfreq=args.dumpfreq,
+                          dumplist=['u'],
                           perturbation_fields=['theta', 'rho'])
 parameters = CompressibleParameters(g=9.80665, cp=1004.)
 diagnostics = Diagnostics(*fieldlist)
@@ -75,7 +151,7 @@ u0 = state.fields("u")
 rho0 = state.fields("rho")
 theta0 = state.fields("theta")
 
-# spaces
+# Spaces
 Vu = u0.function_space()
 Vt = theta0.function_space()
 Vr = rho0.function_space()
@@ -95,6 +171,7 @@ thetab = Tsurf*exp(N**2*z/g)
 theta_b = Function(Vt).interpolate(thetab)
 
 # Calculate hydrostatic Pi
+PETSc.Sys.Print("Computing hydrostatic Exner pressure...\n")
 params = {'pc_type': 'fieldsplit',
           'pc_fieldsplit_type': 'schur',
           'ksp_type': 'gmres',
@@ -189,8 +266,9 @@ else:
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
 
-# build time stepper
+# Build time stepper
 stepper = CrankNicolson(state, advected_fields, linear_solver,
                         compressible_forcing)
 
+PETSc.Sys.Print("Starting simulation...\n")
 stepper.run(t=0, tmax=tmax)
