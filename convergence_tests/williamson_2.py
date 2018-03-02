@@ -351,7 +351,7 @@ D_L2errs = []
 U_Linferrs = []
 D_Linferrs = []
 num_cells = []
-for ref_level in [3, 4, 5, 6, 7]:
+for ref_level in [3, 4, 5, 6, 7, 8]:
     L2errs, Linferrs, mesh = run_williamson2(refinement_level=ref_level,
                                              dumpfreq=args.dumpfreq,
                                              test=args.test,
