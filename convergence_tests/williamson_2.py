@@ -68,10 +68,13 @@ def run_williamson2(refinement_level, dumpfreq=100, test=False,
     day = 24.*60.*60.
 
     # Earth-sized mesh
-    mesh_degree = 2
-    mesh = OctahedralSphereMesh(R, refinement_level,
-                                degree=mesh_degree,
-                                hemisphere="both")
+    # mesh_degree = 2
+    # mesh = OctahedralSphereMesh(R, refinement_level,
+    #                             degree=mesh_degree,
+    #                             hemisphere="both")
+    mesh = IcosahedralSphereMesh(radius=R,
+                                 refinement_level=refinement_level,
+                                 degree=3)
 
     global_normal = Expression(("x[0]", "x[1]", "x[2]"))
     mesh.init_cell_orientations(global_normal)
@@ -351,7 +354,7 @@ D_L2errs = []
 U_Linferrs = []
 D_Linferrs = []
 num_cells = []
-for ref_level in [3, 4, 5, 6, 7, 8]:
+for ref_level in [3, 4, 5, 6, 7]:
     L2errs, Linferrs, mesh = run_williamson2(refinement_level=ref_level,
                                              dumpfreq=args.dumpfreq,
                                              test=args.test,
