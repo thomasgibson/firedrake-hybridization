@@ -120,7 +120,7 @@ def run_williamson2(refinement_level, dumpfreq=100, test=False,
 
     # Coriolis expression (1/s)
     fexpr = 2*Omega*x[2]/R0
-    Vm = FunctionSpace(mesh, "CG", mesh_degree)
+    Vm = FunctionSpace(mesh, "CG", 3)
     f = Function(Vm).interpolate(fexpr)
 
     # Build timestepping solver
