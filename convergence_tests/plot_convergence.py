@@ -6,7 +6,6 @@ import seaborn
 import matplotlib
 
 from matplotlib import pyplot as plt
-from mpltools import annotation
 
 
 FONTSIZE = 14
@@ -23,12 +22,13 @@ df = pd.read_csv(data)
 seaborn.set(style="ticks")
 
 # Set up mesh information
-refs = [3, 4, 5]
+refs = [3, 4, 5, 6]
 
 num_cells = []
 u_dofs = []
 D_dofs = []
 avg_mesh_size = []
+dx2 = []
 for ref in refs:
     R = 6371220.
     mesh = IcosahedralSphereMesh(radius=R,
@@ -52,6 +52,7 @@ for ref in refs:
     a = 4*pi*R**2
     num_cells.append(cells)
     avg_mesh_size.append(sqrt(a/cells))
+    dx2.append(4*pi/cells)
     u_dofs.append(u.dof_dset.layout_vec.getSize())
     D_dofs.append(D.dof_dset.layout_vec.getSize())
 
@@ -59,9 +60,9 @@ colors = ['#30a2da', '#fc4f30']
 markers = iter(["o", "s", "^", "D"])
 linestyles = iter(["solid", "dashed", "dashdot", "dotted"])
 
-fig, (axes,) = plt.subplots(1, 1, figsize=(6, 4), squeeze=False)
+fig, (axes,) = plt.subplots(1, 1, figsize=(6, 5), squeeze=False)
 ax, = axes
-ax.set_ylabel("Normalized error", fontsize=FONTSIZE+2)
+ax.set_ylabel("Normalized error", fontsize=FONTSIZE)
 
 ax.spines["left"].set_position(("outward", 10))
 ax.spines["bottom"].set_position(("outward", 10))
@@ -69,6 +70,7 @@ ax.spines["top"].set_visible(False)
 ax.spines["right"].set_visible(False)
 ax.xaxis.set_ticks_position("bottom")
 ax.yaxis.set_ticks_position("left")
+ax.set_xticks(avg_mesh_size)
 ax.set_xscale('log')
 ax.set_yscale('log')
 ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
@@ -91,9 +93,26 @@ ax.plot(avg_mesh_size, df.NormalizedVelocityL2Errors,
         color=colors[1],
         clip_on=False)
 
-annotation.slope_marker((2e5, 5.e-4), 2, ax=ax,
-                        invert=True,
-                        poly_kwargs={'facecolor': colors[0]})
+ax.plot(avg_mesh_size, dx2,
+        label="$\propto \Delta x^2$",
+        linewidth=LINEWIDTH,
+        linestyle='dotted',
+        marker=None,
+        color='k',
+        clip_on=False)
+
+
+xlabel = fig.text(0.5, -.05,
+                  "Average mesh size $\Delta x$",
+                  ha='center',
+                  fontsize=FONTSIZE)
+
+
+def update_xlabels(ax):
+    xlabels = [format(label, '.2e') for label in avg_mesh_size]
+    ax.set_xticklabels(xlabels)
+
+update_xlabels(ax)
 
 for tick in ax.get_xticklabels():
     tick.set_fontsize(FONTSIZE)
@@ -101,24 +120,12 @@ for tick in ax.get_xticklabels():
 for tick in ax.get_yticklabels():
     tick.set_fontsize(FONTSIZE)
 
-xlabel = fig.text(0.5, -0.1,
-                  "Average mesh size $\Delta x$",
-                  ha='center',
-                  fontsize=FONTSIZE+2)
-
-
-def update_xlabels(ax):
-    xlabels = [format(label, '.0E') for label in ax.get_xticks()]
-    ax.set_xticklabels(xlabels)
-
-update_xlabels(ax)
-
 handles, labels = ax.get_legend_handles_labels()
 legend = fig.legend(handles, labels,
                     loc=9,
-                    bbox_to_anchor=(0.5, 1.175),
+                    bbox_to_anchor=(0.5, 1),
                     bbox_transform=fig.transFigure,
-                    ncol=2,
+                    ncol=3,
                     handlelength=2,
                     fontsize=FONTSIZE,
                     numpoints=1,
