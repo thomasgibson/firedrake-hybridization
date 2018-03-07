@@ -66,12 +66,6 @@ def run_williamson2(refinement_level, dumpfreq=100, test=False,
     R = 6371220.
     H = Constant(5960.)
     day = 24.*60.*60.
-
-    # Earth-sized mesh
-    # mesh_degree = 2
-    # mesh = OctahedralSphereMesh(R, refinement_level,
-    #                             degree=mesh_degree,
-    #                             hemisphere="both")
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=refinement_level,
                                  degree=3)
@@ -332,29 +326,13 @@ def run_williamson2(refinement_level, dumpfreq=100, test=False,
     return (UerrL2, DerrL2), (UerrLinf, DerrLinf), mesh
 
 
-def compute_conv_rates(u):
-    """Computes the convergence rate for this particular test case
-
-    :arg u: a list of errors.
-
-    Returns a list of convergence rates. Note the first element of
-    the list will be empty, as there is no previous computation to
-    compare with. '---' will be inserted into the first component.
-    """
-
-    u_array = np.array(u)
-    rates = list(np.log2(u_array[:-1] / u_array[1:]))
-    rates.insert(0, '---')
-    return rates
-
-
 # Collect errors and mesh information for convergence test
 U_L2errs = []
 D_L2errs = []
 U_Linferrs = []
 D_Linferrs = []
 num_cells = []
-for ref_level in [3, 4, 5, 6, 7]:
+for ref_level in [3, 4, 5, 6]:
     L2errs, Linferrs, mesh = run_williamson2(refinement_level=ref_level,
                                              dumpfreq=args.dumpfreq,
                                              test=args.test,
@@ -373,20 +351,11 @@ for ref_level in [3, 4, 5, 6, 7]:
     D_Linferrs.append(D_errLinf)
     num_cells.append(mesh.num_cells())
 
-u_L2rates = compute_conv_rates(U_L2errs)
-D_L2rates = compute_conv_rates(D_L2errs)
-u_Linfrates = compute_conv_rates(U_Linferrs)
-D_Linfrates = compute_conv_rates(D_Linferrs)
-
 data = {"NumCells": num_cells,
         "NormalizedVelocityL2Errors": U_L2errs,
         "NormalizedDepthL2Errors": D_L2errs,
-        "VelocityL2Rates": u_L2rates,
-        "DepthL2Rates": D_L2rates,
         "NormalizedVelocityLinfErrors": U_Linferrs,
-        "NormalizedDepthLinfErrors": D_Linferrs,
-        "VelocityLinfRates": u_Linfrates,
-        "DepthLinfRates": D_Linfrates}
+        "NormalizedDepthLinfErrors": D_Linferrs}
 
 df = pd.DataFrame(data)
 csv_result = "W2-convergence-test"
