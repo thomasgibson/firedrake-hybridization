@@ -8,7 +8,7 @@ import matplotlib
 from matplotlib import pyplot as plt
 
 
-FONTSIZE = 14
+FONTSIZE = 16
 MARKERSIZE = 10
 LINEWIDTH = 3
 
@@ -70,15 +70,13 @@ ax.spines["top"].set_visible(False)
 ax.spines["right"].set_visible(False)
 ax.xaxis.set_ticks_position("bottom")
 ax.yaxis.set_ticks_position("left")
-ax.set_xticks(avg_mesh_size)
 ax.set_xscale('log')
 ax.set_yscale('log')
-ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
 
 ax.plot(avg_mesh_size, df.NormalizedDepthL2Errors,
         label="$L^2(D)$",
         linewidth=LINEWIDTH,
-        linestyle=next(linestyles),
+        linestyle='solid',
         markersize=MARKERSIZE,
         marker=next(markers),
         color=colors[0],
@@ -87,7 +85,7 @@ ax.plot(avg_mesh_size, df.NormalizedDepthL2Errors,
 ax.plot(avg_mesh_size, df.NormalizedVelocityL2Errors,
         label="$L^2(u)$",
         linewidth=LINEWIDTH,
-        linestyle=next(linestyles),
+        linestyle='dashed',
         markersize=MARKERSIZE,
         marker=next(markers),
         color=colors[1],
@@ -103,22 +101,9 @@ ax.plot(avg_mesh_size, dx2,
 
 
 xlabel = fig.text(0.5, -.05,
-                  "Average mesh size $\Delta x$",
+                  "Average mesh size $\Delta h$",
                   ha='center',
                   fontsize=FONTSIZE)
-
-
-def update_xlabels(ax):
-    xlabels = [format(label, '.2e') for label in avg_mesh_size]
-    ax.set_xticklabels(xlabels)
-
-update_xlabels(ax)
-
-for tick in ax.get_xticklabels():
-    tick.set_fontsize(FONTSIZE)
-
-for tick in ax.get_yticklabels():
-    tick.set_fontsize(FONTSIZE)
 
 handles, labels = ax.get_legend_handles_labels()
 legend = fig.legend(handles, labels,
@@ -126,7 +111,7 @@ legend = fig.legend(handles, labels,
                     bbox_to_anchor=(0.5, 1),
                     bbox_transform=fig.transFigure,
                     ncol=3,
-                    handlelength=2,
+                    handlelength=3,
                     fontsize=FONTSIZE,
                     numpoints=1,
                     frameon=False)
