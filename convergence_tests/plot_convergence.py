@@ -92,7 +92,7 @@ ax.plot(avg_mesh_size, df.NormalizedVelocityL2Errors,
         clip_on=False)
 
 ax.plot(avg_mesh_size, dx2,
-        label="$\propto \Delta x^2$",
+        label="$\propto \Delta h^2$",
         linewidth=LINEWIDTH,
         linestyle='dotted',
         marker=None,
