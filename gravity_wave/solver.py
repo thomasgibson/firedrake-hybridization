@@ -1,4 +1,5 @@
 from firedrake import *
+from pyop2.profiling import timed_region, timed_function
 
 
 class GravityWaveSolver(object):
@@ -20,6 +21,7 @@ class GravityWaveSolver(object):
         previous step, the buoyancy term is reconstructed.
     """
 
+    @timed_function("SolverInit")
     def __init__(self, W2, W3, Wb, dt, c, N, Omega, R,
                  solver_type="AMG", hybridization=True, monitor=False):
         """The constructor for the GravityWaveSolver.
@@ -93,8 +95,9 @@ class GravityWaveSolver(object):
         self._f = interpolate(fexpr, Vcg)
 
         # Construct linear solvers
-        self._build_up_solver()
-        self._build_b_solver()
+        with timed_region("SolverSetup"):
+            self._build_up_solver()
+            self._build_b_solver()
 
     @property
     def amg_paramters(self):
@@ -218,6 +221,7 @@ class GravityWaveSolver(object):
         p0.assign(p)
         b0.assign(b)
 
+    @timed_function("FullSolve")
     def solve(self):
         """Solves the linear gravity wave problem at a particular
         time-step in two-stages. First, the velocity and pressure
@@ -231,12 +235,15 @@ class GravityWaveSolver(object):
         # Solve for u and p updates
         self._up.assign(0.0)
         self._b.assign(0.0)
-        self.up_solver.solve()
+        with timed_region("Velocity-Pressure-Solve"):
+            self.up_solver.solve()
 
         un.assign(self._up.sub(0))
         pn.assign(self._up.sub(1))
 
         # Reconstruct b
         self._btmp.assign(0.0)
-        self.b_solver.solve()
+        with timed_region("Buoyancy-Solve"):
+            self.b_solver.solve()
+
         bn.assign(assemble(bn - self._dt_half_N2*self._btmp))
