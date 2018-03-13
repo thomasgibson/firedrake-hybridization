@@ -37,7 +37,8 @@ dt = nu_cfl/300.0*dx
 c = 300
 N = 0.01
 
-solver = GravityWaveSolver(W2, W3, Wb, dt, c, N)
+solver = GravityWaveSolver(W2, W3, Wb, dt, c, N,
+                           monitor=True, hybridization=True)
 solver.initialize(u0, p0, b0)
 
 tmax = dt*20

@@ -4,38 +4,18 @@ from firedrake import *
 class GravityWaveSolver(object):
     """
     """
-    up_params = {
-        'ksp_type': 'preonly',
-        'mat_type': 'matfree',
-        'pc_type': 'python',
-        'pc_python_type': 'firedrake.HybridizationPC',
-        'hybridization': {'ksp_type': 'cg',
-                          'pc_type': 'gamg',
-                          'ksp_rtol': 1e-8,
-                          'ksp_monitor_true_residual': True,
-                          'mg_levels': {'ksp_type': 'chebyshev',
-                                        'ksp_max_it': 2,
-                                        'pc_type': 'bjacobi',
-                                        'sub_pc_type': 'ilu'}}
-    }
 
-    # up_params = {
-    #     'ksp_type': 'preonly',
-    #     'pc_type': 'lu',
-    #     'mat_type': 'aij',
-    #     'pc_factor_mat_solver_package': 'mumps'
-    # }
-
-    b_params = {
-        'ksp_type': 'cg',
-        'pc_type': 'bjacobi',
-        'sub_pc_type': 'ilu',
-        'ksp_monitor_true_residual': True
-    }
-
-    def __init__(self, W2, W3, Wb, dt, c, N):
+    def __init__(self, W2, W3, Wb, dt, c, N,
+                 solver_type="AMG", hybridization=True, monitor=False):
         """
         """
+
+        self.hybridization = hybridization
+        self.monitor = monitor
+        if solver_type == "AMG":
+            self.up_params = self.amg_paramters
+        else:
+            raise ValueError("Unknown inner solver type")
 
         self._dt = dt
         self._c = c
@@ -64,6 +44,47 @@ class GravityWaveSolver(object):
         self._khat = interpolate(x/R, mesh.coordinates.function_space())
         self._build_up_solver()
         self._build_b_solver()
+
+    @property
+    def amg_paramters(self):
+        """
+        """
+        if self.hybridization:
+            params = {'ksp_type': 'preonly',
+                      'mat_type': 'matfree',
+                      'pc_type': 'python',
+                      'pc_python_type': 'firedrake.HybridizationPC',
+                      'hybridization': {'ksp_type': 'cg',
+                                        'pc_type': 'gamg',
+                                        'ksp_rtol': 1e-8,
+                                        'mg_levels': {'ksp_type': 'chebyshev',
+                                                      'ksp_max_it': 1,
+                                                      'pc_type': 'bjacobi',
+                                                      'sub_pc_type': 'ilu'}}}
+            if self.monitor:
+                params['hybridization']['ksp_monitor_true_residual'] = True
+        else:
+            params = {'ksp_type': 'gmres',
+                      'ksp_rtol': 1e-8,
+                      'pc_type': 'fieldsplit',
+                      'pc_fieldsplit_type': 'schur',
+                      'ksp_type': 'gmres',
+                      'ksp_max_it': 100,
+                      'ksp_gmres_restart': 50,
+                      'pc_fieldsplit_schur_fact_type': 'FULL',
+                      'pc_fieldsplit_schur_precondition': 'selfp',
+                      'fieldsplit_0': {'ksp_type': 'preonly',
+                                       'pc_type': 'bjacobi',
+                                       'sub_pc_type': 'ilu'},
+                      'fieldsplit_1': {'ksp_type': 'preonly',
+                                       'pc_type': 'gamg',
+                                       'mg_levels': {'ksp_type': 'chebyshev',
+                                                     'ksp_max_it': 1,
+                                                     'pc_type': 'bjacobi',
+                                                     'sub_pc_type': 'ilu'}}}
+            if self.monitor:
+                params['ksp_monitor_true_residual'] = True
+        return params
 
     def _build_up_solver(self):
         """
@@ -102,8 +123,15 @@ class GravityWaveSolver(object):
         L_b = dot(btest*self._khat, u0) * dx
         a_b = btest*TrialFunction(self._Wb) * dx
         b_problem = LinearVariationalProblem(a_b, L_b, self._btmp)
+
+        b_params = {'ksp_type': 'cg',
+                    'pc_type': 'bjacobi',
+                    'sub_pc_type': 'ilu'}
+        if self.monitor:
+            b_params['ksp_monitor_true_residual'] = True
+
         b_solver = LinearVariationalSolver(b_problem,
-                                           solver_parameters=self.b_params)
+                                           solver_parameters=b_params)
         self.b_solver = b_solver
 
     def initialize(self, u, p, b):
