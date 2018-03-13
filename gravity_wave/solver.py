@@ -5,7 +5,7 @@ class GravityWaveSolver(object):
     """
     """
 
-    def __init__(self, W2, W3, Wb, dt, c, N,
+    def __init__(self, W2, W3, Wb, dt, c, N, Omega, R,
                  solver_type="AMG", hybridization=True, monitor=False):
         """
         """
@@ -14,6 +14,8 @@ class GravityWaveSolver(object):
         self.monitor = monitor
         if solver_type == "AMG":
             self.up_params = self.amg_paramters
+        elif solver_type == "GMG":
+            self.up_params = self.gmg_parameters
         else:
             raise ValueError("Unknown inner solver type")
 
@@ -42,6 +44,11 @@ class GravityWaveSolver(object):
         x = SpatialCoordinate(mesh)
         R = sqrt(inner(x, x))
         self._khat = interpolate(x/R, mesh.coordinates.function_space())
+
+        fexpr = 2*Omega*x[2]/R
+        Vcg = FunctionSpace(mesh, "CG", 1)
+        self._f = interpolate(fexpr, Vcg)
+
         self._build_up_solver()
         self._build_b_solver()
 
@@ -56,7 +63,7 @@ class GravityWaveSolver(object):
                       'pc_python_type': 'firedrake.HybridizationPC',
                       'hybridization': {'ksp_type': 'cg',
                                         'pc_type': 'gamg',
-                                        'ksp_rtol': 1e-8,
+                                        'ksp_rtol': 1e-5,
                                         'mg_levels': {'ksp_type': 'chebyshev',
                                                       'ksp_max_it': 1,
                                                       'pc_type': 'bjacobi',
@@ -65,7 +72,7 @@ class GravityWaveSolver(object):
                 params['hybridization']['ksp_monitor_true_residual'] = True
         else:
             params = {'ksp_type': 'gmres',
-                      'ksp_rtol': 1e-8,
+                      'ksp_rtol': 1e-5,
                       'pc_type': 'fieldsplit',
                       'pc_fieldsplit_type': 'schur',
                       'ksp_type': 'gmres',
@@ -100,7 +107,9 @@ class GravityWaveSolver(object):
         a_up = (ptest*ptrial
                 + self._dt_half_c2*ptest*div(utrial)
                 - self._dt_half*div(utest)*ptrial
-                + (dot(utest, utrial) + self._omega_N2
+                + (dot(utest, utrial)
+                   + self._dt_half*dot(utest, self._f*cross(self._khat, utrial))
+                   + self._omega_N2
                     * dot(utest, self._khat)
                     * dot(utrial, self._khat))) * dx
 
