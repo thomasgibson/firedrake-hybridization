@@ -2,12 +2,54 @@ from firedrake import *
 
 
 class GravityWaveSolver(object):
-    """
+    """Solver for the linearized compressible Boussinesq equations
+    (includes Coriolis term). The equations are solved in three stages:
+
+    (1) First analytically eliminate the buoyancy perturbation term from
+        the discrete equations. This is possible since there is currently
+        no orography. Note that it is indeed possible to eliminate buoyancy
+        when orography is present, however this must be done at the continuous
+        level first.
+
+    (2) Eliminating buoyancy produces a saddle-point system for the velocity
+        and pressure perturbations. The resulting system is solved using
+        either an approximate full Schur-complement procedure or a
+        hybridized mixed method.
+
+    (3) Once the velocity and perturbation fields are computed from the
+        previous step, the buoyancy term is reconstructed.
     """
 
     def __init__(self, W2, W3, Wb, dt, c, N, Omega, R,
                  solver_type="AMG", hybridization=True, monitor=False):
-        """
+        """The constructor for the GravityWaveSolver.
+
+        :arg W2: The HDiv velocity space.
+        :arg W3: The L2 pressure space.
+        :arg Wb: The "Charney-Phillips" space for the buoyancy field.
+        :arg dt: A positive real number denoting the time-step size.
+        :arg c: A positive real number denoting the speed of sound waves
+                in dry air.
+        :arg N: A positive real number describing the Brunt–Väisälä frequency.
+        :arg Omega: A positive real number; the angular rotation rate of the
+                    Earth.
+        :arg R: A positive real number denoting the radius of the spherical
+                mesh (Earth-size).
+        :solver_type: A string describing which inner-most solver to use on
+                      the pressure space (approximate Schur-complement) or
+                      the trace space (hybridization). Currently, only the
+                      parameter "AMG" is supported, which uses smoothed
+                      aggregation algebraic multigrid (GAMG).
+        :arg hybridization: A boolean switch between using a hybridized
+                            mixed method (True) on the velocity-pressure
+                            system, or GMRES with an approximate Schur-
+                            complement preconditioner (False). The default
+                            is set to `True`
+                            (because hybridization is awesome).
+        :arg monitor: A boolean switch with turns on/off KSP monitoring
+                      of the problem residuals (primarily for debugging
+                      and checking convergence of the solver). When profiling,
+                      keep this set to `False`.
         """
 
         self.hybridization = hybridization
@@ -56,7 +98,9 @@ class GravityWaveSolver(object):
 
     @property
     def amg_paramters(self):
-        """
+        """Solver parameters for the velocity-pressure system using
+        algebraic multigrid. Current tolerance is set to 5 digits of
+        accuracy.
         """
 
         if self.hybridization:
@@ -97,8 +141,7 @@ class GravityWaveSolver(object):
         return params
 
     def _build_up_solver(self):
-        """
-        """
+        """Constructs the solver for the velocity-pressure increments."""
 
         # Current state
         u0, p0, b0 = self._state.split()
@@ -137,8 +180,7 @@ class GravityWaveSolver(object):
         self.up_solver = up_solver
 
     def _build_b_solver(self):
-        """
-        """
+        """Constructs the solver for the buoyancy update."""
 
         # Computed velocity perturbation
         u0, _, _ = self._state.split()
@@ -161,7 +203,14 @@ class GravityWaveSolver(object):
         self.b_solver = b_solver
 
     def initialize(self, u, p, b):
-        """
+        """Initialized the solver state with initial conditions
+        for the velocity, pressure, and buoyancy fields.
+
+        :arg u: An initial condition (`firedrake.Function`)
+                for the velocity field.
+        :arg p: An initial condition for the pressure field.
+        :arg b: And finally an function describing the initial
+                state of the buoyancy field.
         """
 
         u0, p0, b0 = self._state.split()
@@ -170,7 +219,10 @@ class GravityWaveSolver(object):
         b0.assign(b)
 
     def solve(self):
-        """
+        """Solves the linear gravity wave problem at a particular
+        time-step in two-stages. First, the velocity and pressure
+        solutions are computed, then buoyancy is reconstructed from
+        the computed fields. The solver state is then updated.
         """
 
         # Previous states
