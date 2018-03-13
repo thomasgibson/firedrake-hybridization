@@ -4,7 +4,7 @@ from firedrake import *
 class GravityWaveSolver(object):
     """
     """
-    params = {
+    up_params = {
         'ksp_type': 'preonly',
         'mat_type': 'matfree',
         'pc_type': 'python',
@@ -12,93 +12,122 @@ class GravityWaveSolver(object):
         'hybridization': {'ksp_type': 'cg',
                           'pc_type': 'gamg',
                           'ksp_rtol': 1e-8,
+                          'ksp_monitor_true_residual': True,
                           'mg_levels': {'ksp_type': 'chebyshev',
                                         'ksp_max_it': 2,
                                         'pc_type': 'bjacobi',
                                         'sub_pc_type': 'ilu'}}
     }
 
+    # up_params = {
+    #     'ksp_type': 'preonly',
+    #     'pc_type': 'lu',
+    #     'mat_type': 'aij',
+    #     'pc_factor_mat_solver_package': 'mumps'
+    # }
+
     b_params = {
         'ksp_type': 'cg',
         'pc_type': 'bjacobi',
-        'sub_pc_type': 'ilu'
+        'sub_pc_type': 'ilu',
+        'ksp_monitor_true_residual': True
     }
 
-    def __init__(self, mesh, dt, W2, W3, Wb):
+    def __init__(self, W2, W3, Wb, dt, c, N):
         """
         """
-        self.alpha = 0.5
-        self.dt = dt
-        self.beta = self.alpha * self.dt
-        self.mesh = mesh
-        self.W = W2 * W3 * Wb
-        self.N = 0.01      # Brunt-Vaisala frequency (1/s)
-        self.c = 343.      # Speed of sound in dry air (m/s)
 
-        kvec = [0.0, 1.0]
-        self.k = Constant(kvec)
+        self._dt = dt
+        self._c = c
+        self._N = N
+        self._dt_half = Constant(0.5*dt)
+        self._dt_half_N2 = Constant(0.5*dt*N**2)
+        self._dt_half_c2 = Constant(0.5*dt*c**2)
+        self._omega_N2 = Constant((0.5*dt*N)**2)
 
-        self.xn = Function(self.W, name="State")
-        self._Wup = W2 * W3
-        self.up = Function(self._Wup)
+        self._Wmixed = W2 * W3
+        self._W2 = self._Wmixed.sub(0)
+        self._W3 = self._Wmixed.sub(1)
         self._Wb = Wb
-        self.b = Function(self._Wb)
 
-        self._setup_solver()
-        self._initialized = False
+        self._up = Function(self._Wmixed)
+        self._b = Function(self._Wb)
+        self._btmp = Function(self._Wb)
 
-    def _setup_solver(self):
+        self._state = Function(self._W2 * self._W3 * self._Wb, name="State")
 
-        u_in, p_in, b_in = split(self.xn)
+        mesh = self._W3.mesh()
+        # Not sure why this doesn't work...
+        # self._khat = CellNormal(mesh)
+        x = SpatialCoordinate(mesh)
+        R = sqrt(inner(x, x))
+        self._khat = interpolate(x/R, mesh.coordinates.function_space())
+        self._build_up_solver()
+        self._build_b_solver()
 
-        w, phi = TestFunctions(self._Wup)
-        u, p = TrialFunctions(self._Wup)
+    def _build_up_solver(self):
+        """
+        """
 
-        k = self.k
-        b = -dot(k, u) * (self.N ** 2) * self.beta + b_in
+        u0, p0, b0 = self._state.split()
 
-        bcs = [DirichletBC(self._Wup.sub(0), 0.0, "bottom"),
-               DirichletBC(self._Wup.sub(0), 0.0, "top")]
+        utest, ptest = TestFunctions(self._Wmixed)
+        utrial, ptrial = TrialFunctions(self._Wmixed)
+        bcs = [DirichletBC(self._Wmixed.sub(0), 0.0, "bottom"),
+               DirichletBC(self._Wmixed.sub(0), 0.0, "top")]
 
-        eqn = (
-            inner(w, u - u_in)*dx - self.beta*div(w)*p*dx
-            - self.beta*inner(w, k)*b*dx
-            + phi*(p - p_in)*dx + (self.c ** 2)*self.beta*phi*div(u)*dx
-        )
+        a_up = (ptest*ptrial
+                + self._dt_half_c2*ptest*div(utrial)
+                - self._dt_half*div(utest)*ptrial
+                + (dot(utest, utrial) + self._omega_N2
+                    * dot(utest, self._khat)
+                    * dot(utrial, self._khat))) * dx
 
-        up_problem = LinearVariationalProblem(lhs(eqn), rhs(eqn),
-                                              self.up, bcs=bcs)
+        L_up = (dot(utest, u0)
+                + self._dt_half*dot(utest, self._khat*b0)
+                + ptest*p0) * dx
 
+        up_problem = LinearVariationalProblem(a_up, L_up, self._up, bcs=bcs)
         up_solver = LinearVariationalSolver(up_problem,
-                                            solver_parameters=self.params)
+                                            solver_parameters=self.up_params)
         self.up_solver = up_solver
 
+    def _build_b_solver(self):
+        """
+        """
+
+        u0, _, _ = self._state.split()
+
         btest = TestFunction(self._Wb)
-        btrial = TrialFunction(self._Wb)
-        u, p = self.up.split()
-        b_eqn = btest*(btrial - b_in + dot(k, u)*(self.N ** 2)*self.beta)*dx
-        b_problem = LinearVariationalProblem(lhs(b_eqn), rhs(b_eqn), self.b)
+        L_b = dot(btest*self._khat, u0) * dx
+        a_b = btest*TrialFunction(self._Wb) * dx
+        b_problem = LinearVariationalProblem(a_b, L_b, self._btmp)
         b_solver = LinearVariationalSolver(b_problem,
                                            solver_parameters=self.b_params)
         self.b_solver = b_solver
 
-    def initialize(self, u_in, p_in, b_in):
-        u, p, b = self.xn.split()
-        u.assign(u_in)
-        p.assign(p_in)
-        b.assign(b_in)
-        self._initialized = True
+    def initialize(self, u, p, b):
+        """
+        """
+        u0, p0, b0 = self._state.split()
+        u0.assign(u)
+        p0.assign(p)
+        b0.assign(b)
 
     def solve(self):
-        if not self._initialized:
-            raise RuntimeError("Need initial conditions")
+        """
+        """
+        un, pn, bn = self._state.split()
 
+        # Solve for u and p
+        self._up.assign(0.0)
+        self._b.assign(0.0)
         self.up_solver.solve()
 
-        u, p, b = self.xn.split()
-        u1, p1 = self.up.split()
-        u.assign(u1)
-        p.assign(p1)
+        un.assign(self._up.sub(0))
+        pn.assign(self._up.sub(1))
 
+        # Reconstruct b
+        self._btmp.assign(0.0)
         self.b_solver.solve()
-        b.assign(self.b)
+        bn.assign(assemble(bn - self._dt_half_N2*self._btmp))
