@@ -29,6 +29,11 @@ parser.add_argument("--hybridization",
                     help=("Use a hybridized mixed method to solve the "
                           "gravity wave equations."))
 
+parser.add_argument("--nu_cfl",
+                    default=1,
+                    type=int,
+                    help="Value for the horizontal courant number.")
+
 parser.add_argument("--order",
                     default=1,
                     type=int,
@@ -36,6 +41,7 @@ parser.add_argument("--order",
 
 parser.add_argument("--rtol",
                     default=1.0E-4,
+                    type=float,
                     help="Rtolerance for the linear solve.")
 
 parser.add_argument("--test",
@@ -95,7 +101,7 @@ W2, W3, Wb, _ = construct_spaces(mesh, order=order)
 c = 300
 N = 0.01
 Omega = 7.292e-5
-nu_cfl = 8.
+nu_cfl = args.nu_cfl
 num_cells = mesh.cell_set.size
 dx = 2.*r_earth/math.sqrt(3.)*math.sqrt(4.*math.pi/(num_cells))
 dt = nu_cfl/c*dx
