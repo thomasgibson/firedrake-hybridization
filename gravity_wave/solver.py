@@ -1,4 +1,5 @@
 from firedrake import *
+from firedrake.utils import cached_property
 from pyop2.profiling import timed_region, timed_function
 
 
@@ -22,7 +23,7 @@ class GravityWaveSolver(object):
     """
 
     @timed_function("SolverInit")
-    def __init__(self, W2, W3, Wb, dt, c, N, Omega, R,
+    def __init__(self, W2, W3, Wb, dt, c, N, Omega, R, rtol=1.0E-6,
                  solver_type="AMG", hybridization=True, monitor=False):
         """The constructor for the GravityWaveSolver.
 
@@ -37,6 +38,7 @@ class GravityWaveSolver(object):
                     Earth.
         :arg R: A positive real number denoting the radius of the spherical
                 mesh (Earth-size).
+        :arg rtol: The relative tolerance for the solver.
         :solver_type: A string describing which inner-most solver to use on
                       the pressure space (approximate Schur-complement) or
                       the trace space (hybridization). Currently, only the
@@ -56,6 +58,7 @@ class GravityWaveSolver(object):
 
         self.hybridization = hybridization
         self.monitor = monitor
+        self.rtol = rtol
         if solver_type == "AMG":
             self.up_params = self.amg_paramters
         else:
@@ -99,21 +102,22 @@ class GravityWaveSolver(object):
             self._build_up_solver()
             self._build_b_solver()
 
+        self.residuals = []
+
     @property
     def amg_paramters(self):
         """Solver parameters for the velocity-pressure system using
-        algebraic multigrid. Current tolerance is set to 5 digits of
-        accuracy.
+        algebraic multigrid.
         """
 
         if self.hybridization:
             params = {'ksp_type': 'preonly',
-                      'mat_type': 'matfree',
+                      'pmat_type': 'matfree',
                       'pc_type': 'python',
                       'pc_python_type': 'firedrake.HybridizationPC',
                       'hybridization': {'ksp_type': 'cg',
                                         'pc_type': 'gamg',
-                                        'ksp_rtol': 1e-5,
+                                        'ksp_rtol': self.rtol,
                                         'mg_levels': {'ksp_type': 'chebyshev',
                                                       'ksp_max_it': 1,
                                                       'pc_type': 'bjacobi',
@@ -122,7 +126,7 @@ class GravityWaveSolver(object):
                 params['hybridization']['ksp_monitor_true_residual'] = True
         else:
             params = {'ksp_type': 'gmres',
-                      'ksp_rtol': 1e-5,
+                      'ksp_rtol': self.rtol,
                       'pc_type': 'fieldsplit',
                       'pc_fieldsplit_type': 'schur',
                       'ksp_type': 'gmres',
@@ -143,6 +147,53 @@ class GravityWaveSolver(object):
                 params['ksp_monitor_true_residual'] = True
         return params
 
+    @cached_property
+    def _build_up_bilinear_form(self):
+        """Bilinear form for the gravity wave velocity-pressure
+        subsystem.
+        """
+
+        utest, ptest = TestFunctions(self._Wmixed)
+        u, p = TrialFunctions(self._Wmixed)
+
+        def outward(u):
+            return cross(self._khat, u)
+
+        # Linear gravity wave system for the velocity and pressure
+        # increments (buoyancy has been eliminated in the discrete
+        # equations since there is no orography)
+        a_up = (ptest*p
+                + self._dt_half_c2*ptest*div(u)
+                - self._dt_half*div(utest)*p
+                + (dot(utest, u)
+                   + self._dt_half*dot(utest, self._f*outward(u))
+                   + self._omega_N2
+                    * dot(utest, self._khat)
+                    * dot(u, self._khat))) * dx
+        return a_up
+
+    def _build_up_rhs(self, u0, p0, b0):
+        """Right-hand side for the gravity wave velocity-pressure
+        subsystem.
+        """
+
+        utest, ptest = TestFunctions(self._Wmixed)
+        L_up = (dot(utest, u0)
+                + self._dt_half*dot(utest, self._khat*b0)
+                + ptest*p0) * dx
+
+        return L_up
+
+    def up_residual(self, old_state, new_up):
+        """Returns the residual of the velocity-pressure system."""
+
+        u0, p0, b0 = old_state.split()
+        res = self._build_up_rhs(u0, p0, b0)
+        L = self._build_up_bilinear_form
+        res -= action(L, new_up)
+
+        return res
+
     def _build_up_solver(self):
         """Constructs the solver for the velocity-pressure increments."""
 
@@ -157,24 +208,8 @@ class GravityWaveSolver(object):
         bcs = [DirichletBC(self._Wmixed.sub(0), 0.0, "bottom"),
                DirichletBC(self._Wmixed.sub(0), 0.0, "top")]
 
-        def outward(u):
-            return cross(self._khat, u)
-
-        # Linear gravity wave system for the velocity and pressure
-        # increments (buoyancy has been eliminated in the discrete
-        # equations since there is no orography)
-        a_up = (ptest*ptrial
-                + self._dt_half_c2*ptest*div(utrial)
-                - self._dt_half*div(utest)*ptrial
-                + (dot(utest, utrial)
-                   + self._dt_half*dot(utest, self._f*outward(utrial))
-                   + self._omega_N2
-                    * dot(utest, self._khat)
-                    * dot(utrial, self._khat))) * dx
-
-        L_up = (dot(utest, u0)
-                + self._dt_half*dot(utest, self._khat*b0)
-                + ptest*p0) * dx
+        a_up = self._build_up_bilinear_form
+        L_up = self._build_up_rhs(u0, p0, b0)
 
         # Set up linear solver
         up_problem = LinearVariationalProblem(a_up, L_up, self._up, bcs=bcs)
@@ -235,8 +270,12 @@ class GravityWaveSolver(object):
         # Solve for u and p updates
         self._up.assign(0.0)
         self._b.assign(0.0)
+        r0 = assemble(self.up_residual(self._state, self._up))
         with timed_region("Velocity-Pressure-Solve"):
             self.up_solver.solve()
+
+        rn = assemble(self.up_residual(self._state, self._up))
+        self.residuals.append(rn.dat.norm/r0.dat.norm)
 
         un.assign(self._up.sub(0))
         pn.assign(self._up.sub(1))
