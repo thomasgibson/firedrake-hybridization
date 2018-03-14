@@ -23,7 +23,7 @@ class GravityWaveSolver(object):
     """
 
     def __init__(self, W2, W3, Wb, dt, c, N, Omega, R, rtol=1.0E-6,
-                 solver_type="AMG", hybridization=True, monitor=False):
+                 solver_type="AMG", hybridization=False, monitor=False):
         """The constructor for the GravityWaveSolver.
 
         :arg W2: The HDiv velocity space.
@@ -46,9 +46,7 @@ class GravityWaveSolver(object):
         :arg hybridization: A boolean switch between using a hybridized
                             mixed method (True) on the velocity-pressure
                             system, or GMRES with an approximate Schur-
-                            complement preconditioner (False). The default
-                            is set to `True`
-                            (because hybridization is awesome).
+                            complement preconditioner (False).
         :arg monitor: A boolean switch with turns on/off KSP monitoring
                       of the problem residuals (primarily for debugging
                       and checking convergence of the solver). When profiling,
@@ -117,7 +115,7 @@ class GravityWaveSolver(object):
                                         'pc_type': 'gamg',
                                         'ksp_rtol': self.rtol,
                                         'mg_levels': {'ksp_type': 'chebyshev',
-                                                      'ksp_max_it': 1,
+                                                      'ksp_max_it': 2,
                                                       'pc_type': 'bjacobi',
                                                       'sub_pc_type': 'ilu'}}}
             if self.monitor:
@@ -135,10 +133,11 @@ class GravityWaveSolver(object):
                       'fieldsplit_0': {'ksp_type': 'preonly',
                                        'pc_type': 'bjacobi',
                                        'sub_pc_type': 'ilu'},
-                      'fieldsplit_1': {'ksp_type': 'preonly',
+                      'fieldsplit_1': {'ksp_type': 'cg',
                                        'pc_type': 'gamg',
+                                       'ksp_rtol': self.rtol,
                                        'mg_levels': {'ksp_type': 'chebyshev',
-                                                     'ksp_max_it': 1,
+                                                     'ksp_max_it': 2,
                                                      'pc_type': 'bjacobi',
                                                      'sub_pc_type': 'ilu'}}}
             if self.monitor:
