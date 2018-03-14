@@ -106,20 +106,22 @@ class GravityWaveSolver(object):
         algebraic multigrid.
         """
 
+        inner_params = {'ksp_type': 'cg',
+                        'pc_type': 'gamg',
+                        'ksp_rtol': self.rtol,
+                        'mg_levels': {'ksp_type': 'chebyshev',
+                                      'ksp_max_it': 2,
+                                      'pc_type': 'bjacobi',
+                                      'sub_pc_type': 'ilu'}}
+        if self.monitor:
+            inner_params['ksp_monitor_true_residual'] = True
+
         if self.hybridization:
             params = {'ksp_type': 'preonly',
                       'pmat_type': 'matfree',
                       'pc_type': 'python',
                       'pc_python_type': 'firedrake.HybridizationPC',
-                      'hybridization': {'ksp_type': 'cg',
-                                        'pc_type': 'gamg',
-                                        'ksp_rtol': self.rtol,
-                                        'mg_levels': {'ksp_type': 'chebyshev',
-                                                      'ksp_max_it': 2,
-                                                      'pc_type': 'bjacobi',
-                                                      'sub_pc_type': 'ilu'}}}
-            if self.monitor:
-                params['hybridization']['ksp_monitor_true_residual'] = True
+                      'hybridization': inner_params}
         else:
             params = {'ksp_type': 'gmres',
                       'ksp_rtol': self.rtol,
@@ -133,15 +135,10 @@ class GravityWaveSolver(object):
                       'fieldsplit_0': {'ksp_type': 'preonly',
                                        'pc_type': 'bjacobi',
                                        'sub_pc_type': 'ilu'},
-                      'fieldsplit_1': {'ksp_type': 'cg',
-                                       'pc_type': 'gamg',
-                                       'ksp_rtol': self.rtol,
-                                       'mg_levels': {'ksp_type': 'chebyshev',
-                                                     'ksp_max_it': 2,
-                                                     'pc_type': 'bjacobi',
-                                                     'sub_pc_type': 'ilu'}}}
+                      'fieldsplit_1': inner_params}
             if self.monitor:
                 params['ksp_monitor_true_residual'] = True
+
         return params
 
     @cached_property
