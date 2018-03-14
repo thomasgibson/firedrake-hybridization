@@ -34,6 +34,10 @@ parser.add_argument("--order",
                     type=int,
                     help="Order of the compatible mixed method.")
 
+parser.add_argument("--rtol",
+                    default=1.0E-4,
+                    help="Rtolerance for the linear solve.")
+
 parser.add_argument("--test",
                     action="store_true",
                     help="Enable a quick test run.")
@@ -142,7 +146,7 @@ p0.interpolate(psexp)
 
 # Setup linear solvers
 solver = GravityWaveSolver(W2, W3, Wb, dt, c, N, Omega, r_earth,
-                           monitor=args.test,
+                           monitor=args.test, rtol=args.rtol,
                            hybridization=args.hybridization)
 
 # Initialize
