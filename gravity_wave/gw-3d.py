@@ -157,7 +157,7 @@ if args.test:
 elif args.long_run:
     tmax = dt*100
 else:
-    tmax = dt*20
+    tmax = dt*10
 
 # RUN!
 t = 0
