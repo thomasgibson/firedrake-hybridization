@@ -98,7 +98,7 @@ mesh = ExtrudedMesh(base, extrusion_type='radial',
 W2, W3, Wb, _ = construct_spaces(mesh, order=order)
 
 # Physical constants and time-stepping parameters
-c = 300
+c = 343
 N = 0.01
 Omega = 7.292e-5
 nu_cfl = args.nu_cfl
