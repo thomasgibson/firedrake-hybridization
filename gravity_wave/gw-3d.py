@@ -34,6 +34,11 @@ parser.add_argument("--nu_cfl",
                     type=int,
                     help="Value for the horizontal courant number.")
 
+parser.add_argument("--num_timesteps",
+                    default=4,
+                    type=int,
+                    help="Number of time steps to take.")
+
 parser.add_argument("--order",
                     default=1,
                     type=int,
@@ -159,11 +164,11 @@ solver = GravityWaveSolver(W2, W3, Wb, dt, c, N, Omega, r_earth,
 solver.initialize(u0, p0, b0)
 
 if args.test:
-    tmax = 4*dt
+    tmax = dt
 elif args.long_run:
     tmax = dt*100
 else:
-    tmax = dt*10
+    tmax = dt*args.num_timesteps
 
 # RUN!
 t = 0
