@@ -24,10 +24,6 @@ parser.add_argument("--extrusion_levels",
                     type=int,
                     help="Number of vertical levels in the extruded mesh.")
 
-parse.add_argument("--cubedsphere",
-                   action="store_true",
-                   help="Use an extruded cubed-sphere mesh.")
-
 parser.add_argument("--hybridization",
                     action="store_true",
                     help=("Use a hybridized mixed method to solve the "
@@ -80,15 +76,9 @@ thickness = 1.0e4
 
 order = args.order
 reflvl = args.refinements
-
-if args.cubedsphere:
-    base = CubedSphereMesh(r_earth,
-                           refinement_level=reflvl,
-                           degree=3)
-else:
-    base = IcosahedralSphereMesh(r_earth,
-                                 refinement_level=reflvl,
-                                 degree=3)
+base = IcosahedralSphereMesh(r_earth,
+                             refinement_level=reflvl,
+                             degree=3)
 
 # Extruded mesh
 mesh = ExtrudedMesh(base, extrusion_type='radial',
@@ -96,6 +86,15 @@ mesh = ExtrudedMesh(base, extrusion_type='radial',
 
 # Compatible finite element spaces
 W2, W3, Wb, _ = construct_spaces(mesh, order=order)
+
+# Physical constants and time-stepping parameters
+c = 300
+N = 0.01
+Omega = 7.292e-5
+nu_cfl = 8.
+num_cells = mesh.cell_set.size
+dx = 2.*r_earth/math.sqrt(3.)*math.sqrt(4.*math.pi/(num_cells))
+dt = nu_cfl/c*dx
 
 # Initial condition for velocity
 u0 = Function(W2)
@@ -129,15 +128,17 @@ b0.interpolate(bexpr)
 
 # Initial condition for pressure
 p0 = Function(W3).assign(0.0)
-
-# Physical constants and time-stepping parameters
-c = 300
-N = 0.01
-Omega = 7.292e-5
-nu_cfl = 8.
-num_cells = mesh.cell_set.size
-dx = 2.*r_earth/math.sqrt(3.)*math.sqrt(4.*math.pi/(num_cells))
-dt = nu_cfl/c*dx
+p_eq = 1000.0 * 100.0
+g = 9.810616
+R_d = 287.0
+T_eq = 300.0
+c_p = 1004.5
+kappa = 2.0/7.0
+G = g**2/(N**2*c_p)
+Ts = Function(W_CG1).interpolate(G + (T_eq-G)*exp(
+    -(u_max*N**2/(4*g*g))*u_max*(cos(2.0*lat)-1.0)))
+psexp = p_eq*exp((u_max/(4.0*G*R_d))*u_max*(cos(2.0*lat)-1.0))*(Ts/T_eq)**(1.0/kappa)
+p0.interpolate(psexp)
 
 # Setup linear solvers
 solver = GravityWaveSolver(W2, W3, Wb, dt, c, N, Omega, r_earth,
