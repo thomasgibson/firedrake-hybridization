@@ -1,6 +1,7 @@
 from firedrake import *
 from firedrake.petsc import PETSc
 from function_spaces import construct_spaces
+from ksp_monitor import KSPMonitor
 from solver import GravityWaveSolver
 from argparse import ArgumentParser
 import math
@@ -12,20 +13,15 @@ PETSc.Log.begin()
 parser = ArgumentParser(description="""Linear gravity wave system.""",
                         add_help=False)
 
-parser.add_argument("--inner_solver_type",
-                    default="GAMG",
-                    choices=["GAMG", "hypre"],
-                    help="Choice of algebraic multigrid for inner solver.")
-
 parser.add_argument("--refinements",
-                    default=3,
+                    default=4,
                     type=int,
-                    choices=[3, 4, 5, 6, 7],
+                    choices=[4, 5, 6, 7, 8],
                     help=("Number of refinements when generating the "
                           "spherical base mesh."))
 
 parser.add_argument("--extrusion_levels",
-                    default=4,
+                    default=20,
                     type=int,
                     help="Number of vertical levels in the extruded mesh.")
 
@@ -50,7 +46,7 @@ parser.add_argument("--order",
                     help="Order of the compatible mixed method.")
 
 parser.add_argument("--rtol",
-                    default=1.0E-4,
+                    default=1.0E-6,
                     type=float,
                     help="Rtolerance for the linear solve.")
 
@@ -164,7 +160,7 @@ p0.interpolate(psexp)
 solver = GravityWaveSolver(W2, W3, Wb, dt, c, N, Omega, r_earth,
                            monitor=args.test, rtol=args.rtol,
                            hybridization=args.hybridization,
-                           solver_type=args.inner_solver_type)
+                           solver_type="gamg")
 
 # Initialize
 solver.initialize(u0, p0, b0)
@@ -179,7 +175,7 @@ else:
 # RUN!
 t = 0
 u, p, b = solver._state.split()
-
+solver.ksp_monitor = KSPMonitor()
 if args.output:
     output = File("results/gw3d/gw3d.pvd")
     output.write(u, p, b)
@@ -193,3 +189,5 @@ else:
     while t < tmax:
         t += dt
         solver.solve()
+
+solver.ksp_monitor.write_to_csv()

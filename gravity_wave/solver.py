@@ -1,4 +1,5 @@
 from firedrake import *
+from ksp_monitor import KSPMonitorDummy
 from firedrake.utils import cached_property
 from pyop2.profiling import timed_stage
 
@@ -23,7 +24,7 @@ class GravityWaveSolver(object):
     """
 
     def __init__(self, W2, W3, Wb, dt, c, N, Omega, R, rtol=1.0E-6,
-                 solver_type="GAMG", hybridization=False, monitor=False):
+                 solver_type="gamg", hybridization=False, monitor=False):
         """The constructor for the GravityWaveSolver.
 
         :arg W2: The HDiv velocity space.
@@ -56,10 +57,8 @@ class GravityWaveSolver(object):
         self.hybridization = hybridization
         self.monitor = monitor
         self.rtol = rtol
-        if solver_type == "GAMG":
-            self.up_params = self.amg_paramters
-        elif solver_type == "hypre":
-            self.up_params = self.hypre_parameters
+        if solver_type == "gamg":
+            self.up_params = self.gamg_paramters
         else:
             raise ValueError("Unknown inner solver type")
 
@@ -100,10 +99,11 @@ class GravityWaveSolver(object):
         self._build_up_solver()
         self._build_b_solver()
 
-        self.residuals = []
+        self._ksp_monitor = KSPMonitorDummy()
+        self.up_residual_reductions = []
 
     @property
-    def amg_paramters(self):
+    def gamg_paramters(self):
         """Solver parameters for the velocity-pressure system using
         algebraic multigrid.
         """
@@ -115,54 +115,6 @@ class GravityWaveSolver(object):
                                       'ksp_max_it': 2,
                                       'pc_type': 'bjacobi',
                                       'sub_pc_type': 'ilu'}}
-        if self.monitor:
-            inner_params['ksp_monitor_true_residual'] = True
-
-        if self.hybridization:
-            params = {'ksp_type': 'preonly',
-                      'pmat_type': 'matfree',
-                      'pc_type': 'python',
-                      'pc_python_type': 'firedrake.HybridizationPC',
-                      'hybridization': inner_params}
-        else:
-            params = {'ksp_type': 'gmres',
-                      'ksp_rtol': self.rtol,
-                      'pc_type': 'fieldsplit',
-                      'pc_fieldsplit_type': 'schur',
-                      'ksp_type': 'gmres',
-                      'ksp_max_it': 100,
-                      'ksp_gmres_restart': 50,
-                      'pc_fieldsplit_schur_fact_type': 'FULL',
-                      'pc_fieldsplit_schur_precondition': 'selfp',
-                      'fieldsplit_0': {'ksp_type': 'preonly',
-                                       'pc_type': 'bjacobi',
-                                       'sub_pc_type': 'ilu'},
-                      'fieldsplit_1': inner_params}
-            if self.monitor:
-                params['ksp_monitor_true_residual'] = True
-
-        return params
-
-    @property
-    def hypre_parameters(self):
-        """
-        """
-
-        inner_params = {'ksp_type': 'cg',
-                        'ksp_rtol': self.rtol,
-                        'pc_type': 'hypre',
-                        'pc_hypre_type': 'boomeramg',
-                        'pc_hypre_boomeramg_max_iter': 1,
-                        'pc_hypre_boomeramg_agg_nl': 0,
-                        'pc_hypre_boomeramg_coarsen_type': 'Falgout',
-                        'pc_hypre_boomeramg_smooth_type': 'Euclid',
-                        'pc_hypre_boomeramg_eu_bj': 1,
-                        'pc_hypre_boomeramg_interptype': 'ext+i',
-                        'pc_hypre_boomeramg_P_max': 0,
-                        'pc_hypre_boomeramg_strong_threshold': 0.25,
-                        'pc_hypre_boomeramg_max_levels': 25,
-                        'pc_hypre_boomeramg_no_CF': False}
-
         if self.monitor:
             inner_params['ksp_monitor_true_residual'] = True
 
@@ -212,8 +164,8 @@ class GravityWaveSolver(object):
                 + (dot(utest, u)
                    + self._dt_half*dot(utest, self._f*outward(u))
                    + self._omega_N2
-                    * dot(utest, self._khat)
-                    * dot(u, self._khat))) * dx
+                   * dot(utest, self._khat)
+                   * dot(u, self._khat))) * dx
         return a_up
 
     def _build_up_rhs(self, u0, p0, b0):
@@ -260,6 +212,26 @@ class GravityWaveSolver(object):
         up_solver = LinearVariationalSolver(up_problem,
                                             solver_parameters=self.up_params)
         self.up_solver = up_solver
+
+    @property
+    def ksp_monitor(self):
+        """Returns the KSP monitor attached to this solver. Note
+        that the monitor is for the velocity-pressure system.
+        """
+
+        return self._ksp_monitor
+
+    @ksp_monitor.setter
+    def ksp_monitor(self, kspmonitor):
+        """Set the monitor for the velocity-pressure system.
+
+        :arg kspmonitor: a monitor to use.
+        """
+
+        self._ksp_monitor = kspmonitor
+        ksp = self.up_solver.snes.ksp
+
+        ksp.setMonitor(self._ksp_monitor)
 
     def _build_b_solver(self):
         """Constructs the solver for the buoyancy update."""
@@ -318,7 +290,8 @@ class GravityWaveSolver(object):
             self.up_solver.solve()
 
         rn = assemble(self.up_residual(self._state, self._up))
-        self.residuals.append(rn.dat.norm/r0.dat.norm)
+        self.up_residual_reductions.append(rn.dat.norm/r0.dat.norm)
+        print(self.up_residual_reductions[-1])
 
         un.assign(self._up.sub(0))
         pn.assign(self._up.sub(1))
