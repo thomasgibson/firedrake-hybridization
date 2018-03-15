@@ -12,6 +12,11 @@ PETSc.Log.begin()
 parser = ArgumentParser(description="""Linear gravity wave system.""",
                         add_help=False)
 
+parser.add_argument("--inner_solver_type",
+                    default="GAMG",
+                    choices=["GAMG", "hypre"],
+                    help="Choice of algebraic multigrid for inner solver.")
+
 parser.add_argument("--refinements",
                     default=3,
                     type=int,
@@ -158,7 +163,8 @@ p0.interpolate(psexp)
 # Setup linear solvers
 solver = GravityWaveSolver(W2, W3, Wb, dt, c, N, Omega, r_earth,
                            monitor=args.test, rtol=args.rtol,
-                           hybridization=args.hybridization)
+                           hybridization=args.hybridization,
+                           solver_type=args.inner_solver_type)
 
 # Initialize
 solver.initialize(u0, p0, b0)

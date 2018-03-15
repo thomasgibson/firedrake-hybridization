@@ -23,7 +23,7 @@ class GravityWaveSolver(object):
     """
 
     def __init__(self, W2, W3, Wb, dt, c, N, Omega, R, rtol=1.0E-6,
-                 solver_type="AMG", hybridization=False, monitor=False):
+                 solver_type="GAMG", hybridization=False, monitor=False):
         """The constructor for the GravityWaveSolver.
 
         :arg W2: The HDiv velocity space.
@@ -56,8 +56,10 @@ class GravityWaveSolver(object):
         self.hybridization = hybridization
         self.monitor = monitor
         self.rtol = rtol
-        if solver_type == "AMG":
+        if solver_type == "GAMG":
             self.up_params = self.amg_paramters
+        elif solver_type == "hypre":
+            self.up_params = self.hypre_parameters
         else:
             raise ValueError("Unknown inner solver type")
 
@@ -113,6 +115,54 @@ class GravityWaveSolver(object):
                                       'ksp_max_it': 2,
                                       'pc_type': 'bjacobi',
                                       'sub_pc_type': 'ilu'}}
+        if self.monitor:
+            inner_params['ksp_monitor_true_residual'] = True
+
+        if self.hybridization:
+            params = {'ksp_type': 'preonly',
+                      'pmat_type': 'matfree',
+                      'pc_type': 'python',
+                      'pc_python_type': 'firedrake.HybridizationPC',
+                      'hybridization': inner_params}
+        else:
+            params = {'ksp_type': 'gmres',
+                      'ksp_rtol': self.rtol,
+                      'pc_type': 'fieldsplit',
+                      'pc_fieldsplit_type': 'schur',
+                      'ksp_type': 'gmres',
+                      'ksp_max_it': 100,
+                      'ksp_gmres_restart': 50,
+                      'pc_fieldsplit_schur_fact_type': 'FULL',
+                      'pc_fieldsplit_schur_precondition': 'selfp',
+                      'fieldsplit_0': {'ksp_type': 'preonly',
+                                       'pc_type': 'bjacobi',
+                                       'sub_pc_type': 'ilu'},
+                      'fieldsplit_1': inner_params}
+            if self.monitor:
+                params['ksp_monitor_true_residual'] = True
+
+        return params
+
+    @property
+    def hypre_parameters(self):
+        """
+        """
+
+        inner_params = {'ksp_type': 'cg',
+                        'ksp_rtol': self.rtol,
+                        'pc_type': 'hypre',
+                        'pc_hypre_type': 'boomeramg',
+                        'pc_hypre_boomeramg_max_iter': 1,
+                        'pc_hypre_boomeramg_agg_nl': 0,
+                        'pc_hypre_boomeramg_coarsen_type': 'Falgout',
+                        'pc_hypre_boomeramg_smooth_type': 'Euclid',
+                        'pc_hypre_boomeramg_eu_bj': 1,
+                        'pc_hypre_boomeramg_interptype': 'ext+i',
+                        'pc_hypre_boomeramg_P_max': 0,
+                        'pc_hypre_boomeramg_strong_threshold': 0.25,
+                        'pc_hypre_boomeramg_max_levels': 25,
+                        'pc_hypre_boomeramg_no_CF': False}
+
         if self.monitor:
             inner_params['ksp_monitor_true_residual'] = True
 
