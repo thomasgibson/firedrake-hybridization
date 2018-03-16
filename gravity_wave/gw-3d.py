@@ -30,13 +30,33 @@ parser.add_argument("--hybridization",
                     help=("Use a hybridized mixed method to solve the "
                           "gravity wave equations."))
 
+parser.add_argument("--hybrid_local_solve_type",
+                    default=None,
+                    choices=["colPivHouseholderQr", "partialPivLu",
+                             "fullPivLu", "householderQr", "jacobiSvd",
+                             "fullPivHouseholderQr", "llt", "ldlt"],
+                    help=("Solver type for local solves when "
+                          "using hybridization."))
+
+parser.add_argument("--hybrid_invert_type",
+                    default=None,
+                    choices=["colPivHouseholderQr", "partialPivLu",
+                             "fullPivLu", "householderQr", "jacobiSvd",
+                             "fullPivHouseholderQr", "llt", "ldlt"],
+                    help="Use a factorization to invert local Slate tensors?")
+
+parser.add_argument("--solver_type",
+                    default="gamg",
+                    choices=["gamg", "direct"],
+                    help="Solver type for the linear solver.")
+
 parser.add_argument("--nu_cfl",
                     default=1,
                     type=int,
                     help="Value for the horizontal courant number.")
 
 parser.add_argument("--num_timesteps",
-                    default=4,
+                    default=1,
                     type=int,
                     help="Number of time steps to take.")
 
@@ -52,15 +72,11 @@ parser.add_argument("--rtol",
 
 parser.add_argument("--test",
                     action="store_true",
-                    help="Enable a quick test run.")
+                    help="Enable a quick test run with ksp monitors.")
 
 parser.add_argument("--profile",
                     action="store_true",
                     help="Turn on profiler for simulation timings.")
-
-parser.add_argument("--long_run",
-                    action="store_true",
-                    help="Run simulation for 100 time-steps")
 
 parser.add_argument("--output",
                     action="store_true",
@@ -160,22 +176,25 @@ p0.interpolate(psexp)
 solver = GravityWaveSolver(W2, W3, Wb, dt, c, N, Omega, r_earth,
                            monitor=args.test, rtol=args.rtol,
                            hybridization=args.hybridization,
-                           solver_type="gamg")
+                           solver_type=args.solver_type,
+                           local_invert_method=args.hybrid_invert_type,
+                           local_solve_method=args.hybrid_local_solve_type)
 
 # Initialize
 solver.initialize(u0, p0, b0)
 
 if args.test:
     tmax = dt
-elif args.long_run:
-    tmax = dt*100
 else:
     tmax = dt*args.num_timesteps
 
 # RUN!
 t = 0
 u, p, b = solver._state.split()
-solver.ksp_monitor = KSPMonitor()
+
+if not args.profile:
+    solver.ksp_monitor = KSPMonitor()
+
 if args.output:
     output = File("results/gw3d/gw3d.pvd")
     output.write(u, p, b)

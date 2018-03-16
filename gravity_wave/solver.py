@@ -28,7 +28,9 @@ class GravityWaveSolver(object):
 
     def __init__(self, W2, W3, Wb, dt, c, N, Omega, R, rtol=1.0E-6,
                  solver_type="gamg", hybridization=False,
-                 local_solve_method=None, monitor=False):
+                 local_invert_method=None,
+                 local_solve_method=None,
+                 monitor=False):
         """The constructor for the GravityWaveSolver.
 
         :arg W2: The HDiv velocity space.
@@ -52,6 +54,9 @@ class GravityWaveSolver(object):
                             mixed method (True) on the velocity-pressure
                             system, or GMRES with an approximate Schur-
                             complement preconditioner (False).
+        :arg local_invert_method: Optional argument detailing what kind of
+                                  factorization to perform in Eigen when
+                                  computing local inverses.
         :arg local_solve_method: Optional argument detailing what kind of
                                  factorization to perform in Eigen when
                                  computing the local solves in the hybridized
@@ -63,7 +68,8 @@ class GravityWaveSolver(object):
         """
 
         self.hybridization = hybridization
-        self._local_solve_method = None
+        self._local_solve_method = local_solve_method
+        self._local_invert_method = local_invert_method
         self.monitor = monitor
         self.rtol = rtol
         if solver_type == "gamg":
@@ -353,7 +359,7 @@ class GravityWaveSolver(object):
         Qt = A.block(((0, 1), 2))
 
         # Schur complement operator:
-        S = assemble(Q * Atilde.inv * Qt)
+        S = assemble(Q * Atilde.inv(self._local_invert_method) * Qt)
 
         # Set up linear solver
         linear_solver = LinearSolver(S, solver_parameters=self.params)
@@ -367,7 +373,7 @@ class GravityWaveSolver(object):
         # Function to store the rhs for the trace system
         self._S_rhs = Function(self._WT)
         self._assemble_Srhs = create_assembly_callable(
-            Q * Atilde.inv * R01,
+            Q * Atilde.inv(self._local_invert_method) * R01,
             tensor=self._S_rhs)
 
         # Individual blocks: 0 indices correspond to u coupling;
@@ -384,8 +390,10 @@ class GravityWaveSolver(object):
         Lambda = AssembledVector(self._hybrid_update.sub(2))
         P = AssembledVector(self._hybrid_update.sub(1))
 
-        Sp = A11 - A10 * A00.inv * A01
-        p_problem = Sp.solve(R1 - A10 * A00.inv * (R0 - A02 * Lambda),
+        Sp = A11 - A10 * A00.inv(self._local_invert_method) * A01
+        p_problem = Sp.solve(R1 - A10 *
+                             A00.inv(self._local_invert_method) *
+                             (R0 - A02 * Lambda),
                              method=self._local_solve_method)
 
         u_problem = A00.solve(R0 - A01 * P - A02 * Lambda,
