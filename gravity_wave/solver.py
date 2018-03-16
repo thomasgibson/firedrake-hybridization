@@ -1,7 +1,9 @@
 from firedrake import *
-from ksp_monitor import KSPMonitorDummy
+from firedrake.parloops import par_loop, READ, INC
 from firedrake.utils import cached_property
 from pyop2.profiling import timed_stage
+from ksp_monitor import KSPMonitorDummy
+import numpy as np
 
 
 class GravityWaveSolver(object):
@@ -24,7 +26,8 @@ class GravityWaveSolver(object):
     """
 
     def __init__(self, W2, W3, Wb, dt, c, N, Omega, R, rtol=1.0E-6,
-                 solver_type="gamg", hybridization=False, monitor=False):
+                 solver_type="gamg", hybridization=False,
+                 local_solve_method=None, monitor=False):
         """The constructor for the GravityWaveSolver.
 
         :arg W2: The HDiv velocity space.
@@ -48,6 +51,10 @@ class GravityWaveSolver(object):
                             mixed method (True) on the velocity-pressure
                             system, or GMRES with an approximate Schur-
                             complement preconditioner (False).
+        :arg local_solve_method: Optional argument detailing what kind of
+                                 factorization to perform in Eigen when
+                                 computing the local solves in the hybridized
+                                 solver.
         :arg monitor: A boolean switch with turns on/off KSP monitoring
                       of the problem residuals (primarily for debugging
                       and checking convergence of the solver). When profiling,
@@ -55,10 +62,13 @@ class GravityWaveSolver(object):
         """
 
         self.hybridization = hybridization
+        self._local_solve_method = None
         self.monitor = monitor
         self.rtol = rtol
         if solver_type == "gamg":
-            self.up_params = self.gamg_paramters
+            self.params = self.gamg_paramters
+        elif solver_type == "direct":
+            self.params = self.direct_parameters
         else:
             raise ValueError("Unknown inner solver type")
 
@@ -77,6 +87,35 @@ class GravityWaveSolver(object):
         self._W3 = self._Wmixed.sub(1)
         self._Wb = Wb
 
+        mesh = self._W3.mesh()
+
+        # Hybridized finite element spaces
+        broken_W2 = BrokenElement(self._W2.ufl_element())
+        self._W2disc = FunctionSpace(mesh, broken_W2)
+
+        h_deg, v_deg = self._W2.ufl_element().degree()
+        tdegree = (h_deg - 1, v_deg - 1)
+        self._WT = FunctionSpace(mesh, "HDiv Trace", tdegree)
+        self._Whybrid = self._W2disc * self._W3 * self._WT
+        self._hybrid_state = Function(self._Whybrid)
+        self._facet_normal = FacetNormal(mesh)
+
+        shapes = (self._W2.finat_element.space_dimension(),
+                  np.prod(self._W2.shape))
+        weight_kernel = """
+        for (int i=0; i<%d; ++i) {
+        for (int j=0; j<%d; ++j) {
+        w[i][j] += 1.0;
+        }}""" % shapes
+
+        self.weight = Function(self._W2)
+        par_loop(weight_kernel, dx, {"w": (self.weight, INC)})
+        self.average_kernel = """
+        for (int i=0; i<%d; ++i) {
+        for (int j=0; j<%d; ++j) {
+        vec_out[i][j] += vec_in[i][j]/w[i][j];
+        }}""" % shapes
+
         # Functions for state solutions
         self._up = Function(self._Wmixed)
         self._b = Function(self._Wb)
@@ -85,7 +124,6 @@ class GravityWaveSolver(object):
         self._state = Function(self._W2 * self._W3 * self._Wb, name="State")
 
         # Outward normal vector
-        mesh = self._W3.mesh()
         x = SpatialCoordinate(mesh)
         R = sqrt(inner(x, x))
         self._khat = interpolate(x/R, mesh.coordinates.function_space())
@@ -96,11 +134,35 @@ class GravityWaveSolver(object):
         self._f = interpolate(fexpr, Vcg)
 
         # Construct linear solvers
-        self._build_up_solver()
+        if self.hybridization:
+            self._build_hybridized_solver()
+        else:
+            self._build_up_solver()
+
         self._build_b_solver()
 
         self._ksp_monitor = KSPMonitorDummy()
         self.up_residual_reductions = []
+
+    @property
+    def direct_parameters(self):
+        """Solver parameters using a direct method (LU)"""
+
+        inner_params = {'ksp_type': 'preonly',
+                        'pc_type': 'lu',
+                        'pc_factor_mat_solver_package': 'mumps'}
+
+        if self.hybridization:
+            params = inner_params
+        else:
+            params = {'ksp_type': 'preonly',
+                      'pc_type': 'fieldsplit',
+                      'pc_fieldsplit_type': 'schur',
+                      'pc_fieldsplit_schur_fact_type': 'FULL',
+                      'fieldsplit_0': inner_params,
+                      'fieldsplit_1': inner_params}
+
+        return params
 
     @property
     def gamg_paramters(self):
@@ -119,17 +181,12 @@ class GravityWaveSolver(object):
             inner_params['ksp_monitor_true_residual'] = True
 
         if self.hybridization:
-            params = {'ksp_type': 'preonly',
-                      'pmat_type': 'matfree',
-                      'pc_type': 'python',
-                      'pc_python_type': 'firedrake.HybridizationPC',
-                      'hybridization': inner_params}
+            params = inner_params
         else:
             params = {'ksp_type': 'gmres',
                       'ksp_rtol': self.rtol,
                       'pc_type': 'fieldsplit',
                       'pc_fieldsplit_type': 'schur',
-                      'ksp_type': 'gmres',
                       'ksp_max_it': 100,
                       'ksp_gmres_restart': 50,
                       'pc_fieldsplit_schur_fact_type': 'FULL',
@@ -168,17 +225,74 @@ class GravityWaveSolver(object):
                    * dot(u, self._khat))) * dx
         return a_up
 
+    @cached_property
+    def _build_hybridized_bilinear_form(self):
+        """Bilinear form for the hybrid-mixed velocity-pressure
+        subsystem.
+        """
+
+        utest, ptest, lambdatest = TestFunctions(self._Whybrid)
+
+        u, p, lambdar = TrialFunctions(self._Whybrid)
+
+        def outward(u):
+            return cross(self._khat, u)
+
+        n = self._facet_normal
+
+        # Hybridized linear gravity wave system for the velocity,
+        # pressure, and trace subsystem (buoyancy has been eliminated
+        # in the discrete equations since there is no orography).
+        # NOTE: The no-slip boundary conditions are applied weakly
+        # in the hybridized problem.
+        a_uplambdar = ((ptest*p
+                        + self._dt_half_c2*ptest*div(u)
+                        - self._dt_half*div(utest)*p
+                        + (dot(utest, u)
+                           + self._dt_half*dot(utest, self._f*outward(u))
+                           + self._omega_N2
+                           * dot(utest, self._khat)
+                           * dot(u, self._khat))) * dx
+                       + lambdar * jump(utest, n=n) * (dS_v + dS_h)
+                       + lambdar * dot(utest, n) * ds_tb
+                       + lambdatest * jump(u, n=n) * (dS_v + dS_h)
+                       + lambdatest * dot(u, n) * ds_tb)
+
+        return a_uplambdar
+
     def _build_up_rhs(self, u0, p0, b0):
         """Right-hand side for the gravity wave velocity-pressure
         subsystem.
         """
 
+        def outward(u):
+            return cross(self._khat, u)
+
         utest, ptest = TestFunctions(self._Wmixed)
         L_up = (dot(utest, u0)
+                + self._dt_half*dot(utest, self._f*outward(u0))
                 + self._dt_half*dot(utest, self._khat*b0)
                 + ptest*p0) * dx
 
         return L_up
+
+    def _build_hybridized_rhs(self, u0, p0, b0):
+        """Right-hand side for the hybridized gravity wave
+        velocity-pressure-trace subsystem.
+        """
+
+        def outward(u):
+            return cross(self._khat, u)
+
+        # No residual for the traces; they only enforce continuity
+        # of the discontinuous velocity normals
+        utest, ptest, _ = TestFunctions(self._Whybrid)
+        L_uplambdar = (dot(utest, u0)
+                       + self._dt_half*dot(utest, self._f*outward(u0))
+                       + self._dt_half*dot(utest, self._khat*b0)
+                       + ptest*p0) * dx
+
+        return L_uplambdar
 
     def up_residual(self, old_state, new_up):
         """Returns the residual of the velocity-pressure system."""
@@ -199,8 +313,6 @@ class GravityWaveSolver(object):
         # Test and trial functions for the velocity-pressure increment
         # system (with strong no-slip boundary conditions on the top
         # and bottom of the atmospheric domain)
-        utest, ptest = TestFunctions(self._Wmixed)
-        utrial, ptrial = TrialFunctions(self._Wmixed)
         bcs = [DirichletBC(self._Wmixed.sub(0), 0.0, "bottom"),
                DirichletBC(self._Wmixed.sub(0), 0.0, "top")]
 
@@ -210,8 +322,95 @@ class GravityWaveSolver(object):
         # Set up linear solver
         up_problem = LinearVariationalProblem(a_up, L_up, self._up, bcs=bcs)
         up_solver = LinearVariationalSolver(up_problem,
-                                            solver_parameters=self.up_params)
-        self.up_solver = up_solver
+                                            solver_parameters=self.params)
+        self.linear_solver = up_solver
+
+    def _build_hybridized_solver(self):
+        """Constructs the Schur-complement system for the hybridized
+        problem.
+        """
+
+        # Current state
+        u0, p0, b0 = self._state.split()
+
+        # Matrix operator has the form:
+        #  | A00 A01 A02 |
+        #  | A10 A11  0  |
+        #  | A20  0   0  |
+        # for the U-Phi-Lambda system.
+        # Create Slate tensors for the 3x3 block operator:
+        A = Tensor(self._build_hybridized_bilinear_form)
+        self._hybrid_op = A
+
+        # Define the 2x2 mixed block:
+        #  | A00 A01 |
+        #  | A10 A11 |
+        # which couples the potential and momentum.
+        Atilde = A.block(((0, 1), (0, 1)))
+
+        # and the off-diagonal blocks:
+        # |A20 0| & |A02 A12|^T:
+        Q = A.block((2, (0, 1)))
+        Qt = A.block(((0, 1), 2))
+
+        # Schur complement operator:
+        S = assemble(Q * Atilde.inv * Qt)
+        S.force_evaluation()
+
+        linear_solver = LinearSolver(S, solver_parameters=self.params)
+        self.linear_solver = linear_solver
+
+    def _Srhs(self):
+        """Return the right-hand side Slate expression for the
+        Schur-complement system in the hybridized mixed method.
+        """
+
+        u0, p0, b0 = self._state.split()
+        R = Tensor(self._build_hybridized_rhs(u0, p0, b0))
+        A = self._hybrid_op
+        Atilde = A.block(((0, 1), (0, 1)))
+        Q = A.block((2, (0, 1)))
+        R01 = R.block(((0, 1),))
+
+        return Q * Atilde.inv * R01
+
+    def _local_solves(self, R):
+        """Perform the local solves to recover the hybridized velocity
+        and pressure unknowns.
+
+        :arg R: a Slate tensor for the problem residual
+        """
+
+        u_hybrid, p_hybrid, lambdar = self._hybrid_state.split()
+        A = self._hybrid_op
+
+        # Individual blocks: 0 indices correspond to u coupling;
+        # 1 corresponds to p coupling; and 2 is trace coupling.
+        A00 = A.block((0, 0))
+        A01 = A.block((0, 1))
+        A10 = A.block((1, 0))
+        A11 = A.block((1, 1))
+        A02 = A.block((0, 2))
+        R0 = R.block((0,))
+        R1 = R.block((1,))
+        Lambda = AssembledVector(lambdar)
+
+        Sp = A11 - A10 * A00.inv * A01
+        p_rec = Sp.solve(R1 - A10 * A00.inv * (R0 - A02 * Lambda),
+                         method=self._local_solve_method)
+        assemble(p_rec, tensor=p_hybrid)
+
+        P = AssembledVector(p_hybrid)
+        u_rec = A00.solve(R0 - A01 * P - A02 * Lambda,
+                          method=self._local_solve_method)
+        assemble(u_rec, tensor=u_hybrid)
+
+        # Transfer hybridized solutions to the conforming spaces
+        self._up.sub(1).assign(p_hybrid)
+        par_loop(self.average_kernel, dx,
+                 {"w": (self.weight, READ),
+                  "vec_in": (u_hybrid, READ),
+                  "vec_out": (self._up.sub(0), INC)})
 
     @property
     def ksp_monitor(self):
@@ -223,13 +422,17 @@ class GravityWaveSolver(object):
 
     @ksp_monitor.setter
     def ksp_monitor(self, kspmonitor):
-        """Set the monitor for the velocity-pressure system.
+        """Set the monitor for the velocity-pressure or trace system.
 
         :arg kspmonitor: a monitor to use.
         """
 
         self._ksp_monitor = kspmonitor
-        ksp = self.up_solver.snes.ksp
+
+        if self.hybridization:
+            ksp = self.linear_solver.ksp
+        else:
+            ksp = self.linear_solver.snes.ksp
 
         ksp.setMonitor(self._ksp_monitor)
 
@@ -283,16 +486,25 @@ class GravityWaveSolver(object):
         un, pn, bn = self._state.split()
 
         # Solve for u and p updates
+        self._hybrid_state.assign(0.0)
+        _, _, lambdar = self._hybrid_state.split()
         self._up.assign(0.0)
         self._b.assign(0.0)
         r0 = assemble(self.up_residual(self._state, self._up))
         with timed_stage("Velocity-Pressure-Solve"):
-            self.up_solver.solve()
+            if self.hybridization:
+                R = self._Srhs()
+                E = assemble(R)
+                self.linear_solver.solve(lambdar, E)
+                self._local_solves(Tensor(self._build_hybridized_rhs(un, pn, bn)))
+            else:
+                self.linear_solver.solve()
 
         rn = assemble(self.up_residual(self._state, self._up))
         self.up_residual_reductions.append(rn.dat.norm/r0.dat.norm)
         print(self.up_residual_reductions[-1])
 
+        # Update state
         un.assign(self._up.sub(0))
         pn.assign(self._up.sub(1))
 
