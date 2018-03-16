@@ -47,7 +47,7 @@ parser.add_argument("--hybrid_invert_type",
 
 parser.add_argument("--solver_type",
                     default="gamg",
-                    choices=["gamg", "direct"],
+                    choices=["hypre", "gamg", "direct"],
                     help="Solver type for the linear solver.")
 
 parser.add_argument("--nu_cfl",

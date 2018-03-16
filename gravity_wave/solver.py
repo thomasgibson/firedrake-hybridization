@@ -74,6 +74,8 @@ class GravityWaveSolver(object):
         self.rtol = rtol
         if solver_type == "gamg":
             self.params = self.gamg_paramters
+        elif solver_type == "hypre":
+            self.params = self.hypre_parameters
         elif solver_type == "direct":
             self.params = self.direct_parameters
         else:
@@ -168,6 +170,47 @@ class GravityWaveSolver(object):
                       'pc_fieldsplit_schur_fact_type': 'FULL',
                       'fieldsplit_0': inner_params,
                       'fieldsplit_1': inner_params}
+
+        return params
+
+    @property
+    def hypre_parameters(self):
+        """Solver parameters using hypre's boomeramg
+        implementation of AMG.
+        """
+
+        inner_params = {'ksp_type': 'cg',
+                        'ksp_rtol': self.rtol,
+                        'pc_type': 'hypre',
+                        'pc_hypre_type': 'boomeramg',
+                        'pc_hypre_boomeramg_no_CF': False,
+                        'pc_hypre_boomeramg_coarsen_type': 'HMIS',
+                        'pc_hypre_boomeramg_interp_type': 'ext+i',
+                        'pc_hypre_boomeramg_P_max': 0,
+                        'pc_hypre_boomeramg_agg_nl': 0,
+                        'pc_hypre_boomeramg_max_level': 5,
+                        'pc_hypre_boomeramg_strong_threshold': 0.25}
+
+        if self.monitor:
+            inner_params['ksp_monitor_true_residual'] = True
+
+        if self.hybridization:
+            params = inner_params
+        else:
+            params = {'ksp_type': 'gmres',
+                      'ksp_rtol': self.rtol,
+                      'pc_type': 'fieldsplit',
+                      'pc_fieldsplit_type': 'schur',
+                      'ksp_max_it': 100,
+                      'ksp_gmres_restart': 50,
+                      'pc_fieldsplit_schur_fact_type': 'FULL',
+                      'pc_fieldsplit_schur_precondition': 'selfp',
+                      'fieldsplit_0': {'ksp_type': 'preonly',
+                                       'pc_type': 'bjacobi',
+                                       'sub_pc_type': 'ilu'},
+                      'fieldsplit_1': inner_params}
+            if self.monitor:
+                params['ksp_monitor_true_residual'] = True
 
         return params
 
