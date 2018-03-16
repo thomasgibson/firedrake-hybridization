@@ -1,7 +1,8 @@
 from firedrake import *
+from firedrake.assemble import create_assembly_callable
 from firedrake.parloops import par_loop, READ, INC
 from firedrake.utils import cached_property
-from pyop2.profiling import timed_stage
+from pyop2.profiling import timed_stage, timed_region
 from ksp_monitor import KSPMonitorDummy
 import numpy as np
 
@@ -97,7 +98,7 @@ class GravityWaveSolver(object):
         tdegree = (h_deg - 1, v_deg - 1)
         self._WT = FunctionSpace(mesh, "HDiv Trace", tdegree)
         self._Whybrid = self._W2disc * self._W3 * self._WT
-        self._hybrid_state = Function(self._Whybrid)
+        self._hybrid_update = Function(self._Whybrid)
         self._facet_normal = FacetNormal(mesh)
 
         shapes = (self._W2.finat_element.space_dimension(),
@@ -307,31 +308,30 @@ class GravityWaveSolver(object):
     def _build_up_solver(self):
         """Constructs the solver for the velocity-pressure increments."""
 
-        # Current state
-        u0, p0, b0 = self._state.split()
-
-        # Test and trial functions for the velocity-pressure increment
-        # system (with strong no-slip boundary conditions on the top
+        # strong no-slip boundary conditions on the top
         # and bottom of the atmospheric domain)
         bcs = [DirichletBC(self._Wmixed.sub(0), 0.0, "bottom"),
                DirichletBC(self._Wmixed.sub(0), 0.0, "top")]
 
-        a_up = self._build_up_bilinear_form
-        L_up = self._build_up_rhs(u0, p0, b0)
+        # Mixed operator
+        A = assemble(self._build_up_bilinear_form, bcs=bcs)
 
         # Set up linear solver
-        up_problem = LinearVariationalProblem(a_up, L_up, self._up, bcs=bcs)
-        up_solver = LinearVariationalSolver(up_problem,
-                                            solver_parameters=self.params)
-        self.linear_solver = up_solver
+        linear_solver = LinearSolver(A, solver_parameters=self.params)
+        self.linear_solver = linear_solver
+
+        # Function to store RHS for the linear solver
+        u0, p0, b0 = self._state.split()
+        self._up_rhs = Function(self._Wmixed)
+        self._assemble_up_rhs = create_assembly_callable(
+            self._build_up_rhs(u0, p0, b0),
+            tensor=self._up_rhs)
 
     def _build_hybridized_solver(self):
         """Constructs the Schur-complement system for the hybridized
-        problem.
+        problem. In addition, all reconstruction calls are generated
+        for recovering velocity and pressure.
         """
-
-        # Current state
-        u0, p0, b0 = self._state.split()
 
         # Matrix operator has the form:
         #  | A00 A01 A02 |
@@ -340,7 +340,6 @@ class GravityWaveSolver(object):
         # for the U-Phi-Lambda system.
         # Create Slate tensors for the 3x3 block operator:
         A = Tensor(self._build_hybridized_bilinear_form)
-        self._hybrid_op = A
 
         # Define the 2x2 mixed block:
         #  | A00 A01 |
@@ -349,40 +348,27 @@ class GravityWaveSolver(object):
         Atilde = A.block(((0, 1), (0, 1)))
 
         # and the off-diagonal blocks:
-        # |A20 0| & |A02 A12|^T:
+        # |A20 0| & |A02 0|^T:
         Q = A.block((2, (0, 1)))
         Qt = A.block(((0, 1), 2))
 
         # Schur complement operator:
         S = assemble(Q * Atilde.inv * Qt)
-        S.force_evaluation()
 
+        # Set up linear solver
         linear_solver = LinearSolver(S, solver_parameters=self.params)
         self.linear_solver = linear_solver
 
-    def _Srhs(self):
-        """Return the right-hand side Slate expression for the
-        Schur-complement system in the hybridized mixed method.
-        """
-
+        # Tensor for the residual
         u0, p0, b0 = self._state.split()
         R = Tensor(self._build_hybridized_rhs(u0, p0, b0))
-        A = self._hybrid_op
-        Atilde = A.block(((0, 1), (0, 1)))
-        Q = A.block((2, (0, 1)))
         R01 = R.block(((0, 1),))
 
-        return Q * Atilde.inv * R01
-
-    def _local_solves(self, R):
-        """Perform the local solves to recover the hybridized velocity
-        and pressure unknowns.
-
-        :arg R: a Slate tensor for the problem residual
-        """
-
-        u_hybrid, p_hybrid, lambdar = self._hybrid_state.split()
-        A = self._hybrid_op
+        # Function to store the rhs for the trace system
+        self._S_rhs = Function(self._WT)
+        self._assemble_Srhs = create_assembly_callable(
+            Q * Atilde.inv * R01,
+            tensor=self._S_rhs)
 
         # Individual blocks: 0 indices correspond to u coupling;
         # 1 corresponds to p coupling; and 2 is trace coupling.
@@ -393,24 +379,23 @@ class GravityWaveSolver(object):
         A02 = A.block((0, 2))
         R0 = R.block((0,))
         R1 = R.block((1,))
-        Lambda = AssembledVector(lambdar)
+
+        # Local coefficient vectors
+        Lambda = AssembledVector(self._hybrid_update.sub(2))
+        P = AssembledVector(self._hybrid_update.sub(1))
 
         Sp = A11 - A10 * A00.inv * A01
-        p_rec = Sp.solve(R1 - A10 * A00.inv * (R0 - A02 * Lambda),
-                         method=self._local_solve_method)
-        assemble(p_rec, tensor=p_hybrid)
+        p_problem = Sp.solve(R1 - A10 * A00.inv * (R0 - A02 * Lambda),
+                             method=self._local_solve_method)
 
-        P = AssembledVector(p_hybrid)
-        u_rec = A00.solve(R0 - A01 * P - A02 * Lambda,
-                          method=self._local_solve_method)
-        assemble(u_rec, tensor=u_hybrid)
+        u_problem = A00.solve(R0 - A01 * P - A02 * Lambda,
+                              method=self._local_solve_method)
 
-        # Transfer hybridized solutions to the conforming spaces
-        self._up.sub(1).assign(p_hybrid)
-        par_loop(self.average_kernel, dx,
-                 {"w": (self.weight, READ),
-                  "vec_in": (u_hybrid, READ),
-                  "vec_out": (self._up.sub(0), INC)})
+        # Two-stage reconstruction
+        self._assemble_pressure = create_assembly_callable(
+            p_problem, tensor=self._hybrid_update.sub(1))
+        self._assemble_velocity = create_assembly_callable(
+            u_problem, tensor=self._hybrid_update.sub(0))
 
     @property
     def ksp_monitor(self):
@@ -428,12 +413,7 @@ class GravityWaveSolver(object):
         """
 
         self._ksp_monitor = kspmonitor
-
-        if self.hybridization:
-            ksp = self.linear_solver.ksp
-        else:
-            ksp = self.linear_solver.snes.ksp
-
+        ksp = self.linear_solver.ksp
         ksp.setMonitor(self._ksp_monitor)
 
     def _build_b_solver(self):
@@ -482,26 +462,44 @@ class GravityWaveSolver(object):
         the computed fields. The solver state is then updated.
         """
 
-        # Previous states
+        # Previous state
         un, pn, bn = self._state.split()
 
-        # Solve for u and p updates
-        self._hybrid_state.assign(0.0)
-        _, _, lambdar = self._hybrid_state.split()
+        # Initial residual
+        self._hybrid_update.assign(0.0)
         self._up.assign(0.0)
         self._b.assign(0.0)
         r0 = assemble(self.up_residual(self._state, self._up))
+
+        # Main solver stage
         with timed_stage("Velocity-Pressure-Solve"):
             if self.hybridization:
-                R = self._Srhs()
-                E = assemble(R)
-                self.linear_solver.solve(lambdar, E)
-                self._local_solves(Tensor(self._build_hybridized_rhs(un, pn, bn)))
-            else:
-                self.linear_solver.solve()
 
+                # Solve for the Lagrange multipliers
+                with timed_region("Trace-Solver"):
+                    self._assemble_Srhs()
+                    self.linear_solver.solve(self._hybrid_update.sub(2),
+                                             self._S_rhs)
+
+                # Recover pressure, then velocity
+                with timed_region("Hybrid-Reconstruct"):
+                    self._assemble_pressure()
+                    self._assemble_velocity()
+
+                    # Transfer hybridized solutions to the conforming spaces
+                    self._up.sub(1).assign(self._hybrid_update.sub(1))
+                    par_loop(self.average_kernel, dx,
+                             {"w": (self.weight, READ),
+                              "vec_in": (self._hybrid_update.sub(0), READ),
+                              "vec_out": (self._up.sub(0), INC)})
+            else:
+                self._assemble_up_rhs()
+                self.linear_solver.solve(self._up, self._up_rhs)
+
+        # Residual after solving
         rn = assemble(self.up_residual(self._state, self._up))
         self.up_residual_reductions.append(rn.dat.norm/r0.dat.norm)
+
         print(self.up_residual_reductions[-1])
 
         # Update state
@@ -512,5 +510,4 @@ class GravityWaveSolver(object):
         self._btmp.assign(0.0)
         with timed_stage("Buoyancy-Solve"):
             self.b_solver.solve()
-
-        bn.assign(assemble(bn - self._dt_half_N2*self._btmp))
+            bn.assign(assemble(bn - self._dt_half_N2*self._btmp))
