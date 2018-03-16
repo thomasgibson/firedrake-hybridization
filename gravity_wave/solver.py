@@ -508,8 +508,6 @@ class GravityWaveSolver(object):
         rn = assemble(self.up_residual(self._state, self._up))
         self.up_residual_reductions.append(rn.dat.norm/r0.dat.norm)
 
-        print(self.up_residual_reductions[-1])
-
         # Update state
         un.assign(self._up.sub(0))
         pn.assign(self._up.sub(1))
