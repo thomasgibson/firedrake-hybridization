@@ -82,6 +82,10 @@ parser.add_argument("--output",
                     action="store_true",
                     help="Write output.")
 
+parser.add_argument("--write_data",
+                    action="store_true",
+                    help="Write data file")
+
 parser.add_argument("--help",
                     action="store_true",
                     help="Show help.")
@@ -209,4 +213,6 @@ else:
         t += dt
         solver.solve()
 
-solver.ksp_monitor.write_to_csv()
+if args.write_data:
+    solver.ksp_monitor.write_to_csv()
+    print(solver.up_residual_reductions)
