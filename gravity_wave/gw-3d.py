@@ -16,7 +16,6 @@ parser = ArgumentParser(description="""Linear gravity wave system.""",
 parser.add_argument("--refinements",
                     default=4,
                     type=int,
-                    choices=[4, 5, 6, 7, 8],
                     help=("Number of refinements when generating the "
                           "spherical base mesh."))
 
