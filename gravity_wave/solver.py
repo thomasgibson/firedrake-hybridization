@@ -5,6 +5,7 @@ from firedrake.utils import cached_property
 from pyop2.profiling import timed_stage, timed_region
 from ksp_monitor import KSPMonitorDummy
 import numpy as np
+import time
 
 
 class GravityWaveSolver(object):
@@ -523,6 +524,7 @@ class GravityWaveSolver(object):
         r0 = assemble(self.up_residual(self._state, self._up))
 
         # Main solver stage
+        t_start = time.time()
         with timed_stage("Velocity-Pressure-Solve"):
             if self.hybridization:
 
@@ -546,6 +548,8 @@ class GravityWaveSolver(object):
             else:
                 self._assemble_up_rhs()
                 self.linear_solver.solve(self._up, self._up_rhs)
+        t_finish = time.time()
+        print ('   elapsed time = ', t_finish-t_start)
 
         # Residual after solving
         rn = assemble(self.up_residual(self._state, self._up))
