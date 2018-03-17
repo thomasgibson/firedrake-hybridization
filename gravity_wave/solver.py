@@ -5,7 +5,6 @@ from firedrake.utils import cached_property
 from pyop2.profiling import timed_stage, timed_region
 from ksp_monitor import KSPMonitorDummy
 import numpy as np
-import time
 
 
 class GravityWaveSolver(object):
@@ -75,6 +74,8 @@ class GravityWaveSolver(object):
         self.rtol = rtol
         if solver_type == "gamg":
             self.params = self.gamg_paramters
+        elif solver_type == "preonly-gamg":
+            self.params = self.preonly_gamg_parameters
         elif solver_type == "hypre":
             self.params = self.hypre_parameters
         elif solver_type == "direct":
@@ -233,6 +234,38 @@ class GravityWaveSolver(object):
 
         if self.hybridization:
             params = inner_params
+        else:
+            params = {'ksp_type': 'gmres',
+                      'ksp_rtol': self.rtol,
+                      'pc_type': 'fieldsplit',
+                      'pc_fieldsplit_type': 'schur',
+                      'ksp_max_it': 100,
+                      'ksp_gmres_restart': 50,
+                      'pc_fieldsplit_schur_fact_type': 'FULL',
+                      'pc_fieldsplit_schur_precondition': 'selfp',
+                      'fieldsplit_0': {'ksp_type': 'preonly',
+                                       'pc_type': 'bjacobi',
+                                       'sub_pc_type': 'ilu'},
+                      'fieldsplit_1': inner_params}
+            if self.monitor:
+                params['ksp_monitor_true_residual'] = True
+
+        return params
+
+    @property
+    def preonly_gamg_parameters(self):
+
+        inner_params = {'ksp_type': 'preonly',
+                        'pc_type': 'gamg',
+                        'mg_levels': {'ksp_type': 'chebyshev',
+                                      'ksp_chebyshev_esteig': True,
+                                      'ksp_max_it': 1,
+                                      'pc_type': 'bjacobi',
+                                      'sub_pc_type': 'ilu'}}
+
+        if self.hybridization:
+            # We need an iterative method for the trace system
+            params = self.gamg_paramters
         else:
             params = {'ksp_type': 'gmres',
                       'ksp_rtol': self.rtol,
@@ -524,7 +557,6 @@ class GravityWaveSolver(object):
         r0 = assemble(self.up_residual(self._state, self._up))
 
         # Main solver stage
-        t_start = time.time()
         with timed_stage("Velocity-Pressure-Solve"):
             if self.hybridization:
 
@@ -548,8 +580,6 @@ class GravityWaveSolver(object):
             else:
                 self._assemble_up_rhs()
                 self.linear_solver.solve(self._up, self._up_rhs)
-        t_finish = time.time()
-        print ('   elapsed time = ', t_finish-t_start)
 
         # Residual after solving
         rn = assemble(self.up_residual(self._state, self._up))
