@@ -1,14 +1,21 @@
 from firedrake import *
 
+import sys
+import petsc4py
 
-__all__ = ["P1HMGSolver"]
+petsc4py.init(sys.argv)
+
+from petsc4py import PETSc
 
 
-class P1HMGSolver(object):
+__all__ = ["P1HMultiGrid"]
+
+
+class P1HMultiGrid(object):
     """
     """
 
-    def __init__(self, S, fine_solution, E,
+    def __init__(self, S, fine_solution, omega_c2=1,
                  mesh_hierarchy=None, mg_type="amg"):
         """
         """
@@ -17,95 +24,133 @@ class P1HMGSolver(object):
 
         self.lambda_f = fine_solution
         self.trace_operator = S
-        self.trace_rhs = E
         self._WT = self.lambda_f.function_space()
-        self._CG1 = FunctionSpace(self._WT.mesh(), "CG", 1)
-        self._p1_sol = Function(self._CG1)
-        self._p1_f = Function(self._CG1)
-        self._p1_r = Function(self._CG1)
         self._trace_r = Function(self._WT)
-        self._update = Function(self._WT)
 
-    def presmooth_trace(self):
-        E_f = self.trace_rhs
-        S_f = self.trace_operator
+        self._P1 = FunctionSpace(self._WT.mesh(), "CG", 1)
 
-        # Pre-smooth with a 3-point Jacobi method
-        solve(S_f, self.lambda_f, E_f,
-              solver_parameters={'ksp_type': 'richardson',
-                                 'ksp_max_it': 3,
-                                 'ksp_convergence_test': 'skip',
-                                 'ksp_initial_guess_nonzero': True,
-                                 'pc_type': 'jacobi'})
+        # Need an index set to copy data into PETSc vecs
+        with self._trace_r.dat.vec as v:
+            ndof = self._WT.dof_dset.size
+            self._idx_set = PETSc.IS().createStride(ndof,
+                                                    first=v.owner_range[0],
+                                                    step=1,
+                                                    comm=v.comm)
 
-    def postsmooth_trace(self):
-        E_f = self.trace_rhs
-        S_f = self.trace_operator
-
-        # Post-smooth with a 5-point Jacobi method
-        solve(S_f, self.lambda_f, E_f,
-              solver_parameters={'ksp_type': 'richardson',
-                                 'ksp_max_it': 5,
-                                 'ksp_convergence_test': 'skip',
-                                 'ksp_initial_guess_nonzero': True,
-                                 'pc_type': 'jacobi'})
-
-    def restrict_to_p1(self, r):
-        project(r, self._p1_r,
-                solver_parameters={'ksp_type': 'cg',
-                                   'ksp_rtol': 1.0E-10,
-                                   'pc_type': 'bjacobi',
-                                   'sub_pc_type': 'ilu'})
-
-    def prolong_to_trace(self, u):
+        # Linear solver for prolongation to trace
         gammar = TestFunction(self._WT)
         lambdar = TrialFunction(self._WT)
-        a = (gammar('+')*lambdar('+')*(dS_v + dS_h) +
-             gammar*lambdar*ds_tb)
-        L = gammar('+')*u('+')*(dS_v + dS_h) + gammar*u*ds_tb
-        solve(a, self._update, L,
-              solver_parameters={'ksp_type': 'cg',
-                                 'ksp_rtol': 1.0E-10,
+        M_t = assemble(gammar('+')*lambdar('+')*(dS_v + dS_h)
+                       + gammar*lambdar*ds_tb)
+
+        tparams = {'ksp_type': 'cg',
+                   'pc_type': 'bjacobi',
+                   'sub_pc_type': 'ilu'}
+        self._trace_mass_solve = LinearSolver(M_t, solver_parameters=tparams)
+
+        # Pre-smoothing with a 3-point ILU-bJacobi method
+        smootherparams = {'ksp_type': 'richardson',
+                          'ksp_max_it': 3,
+                          'ksp_convergence_test': 'skip',
+                          'ksp_initial_guess_nonzero': True,
+                          'pc_type': 'bjacobi',
+                          'sub_pc_type': 'ilu'}
+        self._presmoother = LinearSolver(self.trace_operator,
+                                         solver_parameters=smootherparams)
+
+        # Coarse grid correction problem (positive-definite Helmholtz)
+        u = TrialFunction(self._P1)
+        v = TestFunction(self._P1)
+        L = assemble(-(inner(v, u)*dx +
+                       omega_c2*dot(grad(v), grad(u))*dx))
+
+        cparams = {'ksp_type': 'preonly',
+                   'pc_type': 'gamg',
+                   'mg_levels': {'ksp_type': 'chebyshev',
+                                 'ksp_max_it': 2,
                                  'pc_type': 'bjacobi',
-                                 'sub_pc_type': 'ilu'})
+                                 'sub_pc_type': 'ilu'}}
+        self._coarse_grid_solver = LinearSolver(L, solver_parameters=cparams)
 
-    def solve(self):
+        # Post-smoothing with a 4-point ILU-bJacobi method
+        postsmoothparams = {'ksp_type': 'richardson',
+                            'ksp_max_it': 4,
+                            'ksp_convergence_test': 'skip',
+                            'ksp_initial_guess_nonzero': True,
+                            'pc_type': 'bjacobi',
+                            'sub_pc_type': 'ilu'}
+        self._postsmoother = LinearSolver(self.trace_operator,
+                                          solver_parameters=postsmoothparams)
 
-        # Pre-smooth trace solution
-        self.presmooth_trace()
+    def restrict_to_p1(self, r_lambda, r_coarse):
+        """
+        """
 
-        S_f = self.trace_operator
-        E_f = self.trace_rhs
+        temp = Function(self._WT)
+        self._trace_mass_solve.solve(temp, r_lambda)
+        v = TestFunction(self._P1)
+        r_coarse.assign(assemble(v('+')*temp('+')*(dS_v + dS_h) +
+                                 v*temp*ds_tb))
 
-        # Doesn't work (firedrake matrix * function not right)
-        r_f = assemble(E_f - S_f * self.lambda_f)
-        self.restrict_to_p1(r_f)
+    def prolong_to_trace(self, du, lambdar):
+        """
+        """
 
-        # Restricted residual
-        r_p1 = self._p1_r
+        gammar = TestFunction(self._WT)
+        rhs = assemble(gammar('+')*du('+')*(dS_v + dS_h) +
+                       gammar*du*ds_tb)
+        self._trace_mass_solve.solve(lambdar, rhs)
 
-        # MG step for the P1 problem
-        u = TrialFunction(self._CG1)
-        v = TestFunction(self._CG1)
-        a = inner(grad(v), grad(u))*dx
-        L = inner(v, r_p1)*dx
-        solve(a, self._p1_f, L,
-              solver_parameters={{'ksp_type': 'preonly',
-                                  'pc_type': 'hypre',
-                                  'pc_hypre_type': 'boomeramg',
-                                  'pc_hypre_boomeramg_no_CF': False,
-                                  'pc_hypre_boomeramg_coarsen_type': 'HMIS',
-                                  'pc_hypre_boomeramg_interp_type': 'ext+i',
-                                  'pc_hypre_boomeramg_P_max': 0,
-                                  'pc_hypre_boomeramg_agg_nl': 0,
-                                  'pc_hypre_boomeramg_max_level': 2,
-                                  'pc_hypre_boomeramg_strong_threshold': 0.25}})
+    def solve(self, lambdar, r):
+        """
+        """
 
-        # Prolong to trace
-        self.prolong_to_trace(self._p1_f)
+        # RHS for the coarse problem
+        r_coarse = Function(self._P1)
 
-        # Update
-        self.lambda_f += self._update
+        # coarse-grid solution
+        du = Function(self._P1)
 
-        # Post-smooth
-        self.post_smooth()
+        # prolongated update to lambda
+        dlambdar = Function(self._WT)
+
+        # Algorithm:
+        # 1. Pre-smooth
+        self._presmoother.solve(lambdar, r)
+
+        # Need to restrict the residual, but all
+        # we have are assembled matrices. So we
+        # manually perform the matvec to get the
+        # residual.
+        residual = Function(self._WT)
+        with lambdar.dat.vec as v:
+            with residual.dat.vec as q:
+                q -= self.trace_operator._M.handle*v
+
+        # 2. Restrict the residual to P1
+        self.restrict_to_p1(residual, r_coarse)
+
+        # 3. Coarse grid solve
+        du.assign(0.0)
+        self._coarse_grid_solver.solve(du, r_coarse)
+
+        # 4. Prolongate coarse grid update to trace space
+        self.prolong_to_trace(du, dlambdar)
+        lambdar += dlambdar
+
+        # 5. Postsmooth the update
+        self._postsmoother.solve(lambdar, r)
+
+    def apply(self, pc, x, y):
+        """
+        """
+
+        with self._trace_r.dat.vec as v:
+            temp = x.getSubVector(self._idx_set)
+            x.copy(v)
+            x.restoreSubVector(self._idx_set, temp)
+
+        self.solve(self.lambda_f, self._trace_r)
+
+        with self.lambda_f.dat.vec_ro as v:
+            v.copy(y)
