@@ -46,7 +46,8 @@ parser.add_argument("--hybrid_invert_type",
 
 parser.add_argument("--solver_type",
                     default="gamg",
-                    choices=["hypre", "gamg", "preonly-gamg", "direct"],
+                    choices=["hypre", "gamg", "preonly-gamg",
+                             "direct", "hybrid_mg"],
                     help="Solver type for the linear solver.")
 
 parser.add_argument("--nu_cfl",
@@ -111,13 +112,25 @@ thickness = 1.0e4
 
 order = args.order
 reflvl = args.refinements
-base = IcosahedralSphereMesh(r_earth,
-                             refinement_level=reflvl,
-                             degree=3)
 
-# Extruded mesh
-mesh = ExtrudedMesh(base, extrusion_type='radial',
-                    layers=nlayer, layer_height=thickness/nlayer)
+# Save this for later...
+if bool(None):
+    n_mglvls = reflvl - 3
+    base_h = MeshHierarchy(IcosahedralSphereMesh(r_earth,
+                                                 refinement_level=3,
+                                                 degree=3),
+                           n_mglvls)
+    mh = ExtrudedMeshHierarchy(base_h, extrusion_type='radial',
+                               layers=nlayer, layer_height=thickness/nlayer)
+    mesh = mh[-1]
+else:
+    base = IcosahedralSphereMesh(r_earth,
+                                 refinement_level=reflvl,
+                                 degree=3)
+
+    # Extruded mesh
+    mesh = ExtrudedMesh(base, extrusion_type='radial',
+                        layers=nlayer, layer_height=thickness/nlayer)
 
 # Compatible finite element spaces
 W2, W3, Wb, _ = construct_spaces(mesh, order=order)

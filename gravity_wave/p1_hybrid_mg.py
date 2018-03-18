@@ -15,12 +15,9 @@ class P1HMultiGrid(object):
     """
     """
 
-    def __init__(self, S, fine_solution, omega_c2=1,
-                 mesh_hierarchy=None, mg_type="amg"):
+    def __init__(self, S, fine_solution, omega_c2=1):
         """
         """
-        if mg_type == "gmg":
-            assert mesh_hierarchy is not None
 
         self.lambda_f = fine_solution
         self.trace_operator = S
@@ -48,9 +45,10 @@ class P1HMultiGrid(object):
                    'sub_pc_type': 'ilu'}
         self._trace_mass_solve = LinearSolver(M_t, solver_parameters=tparams)
 
-        # Pre-smoothing with a 3-point ILU-bJacobi method
-        smootherparams = {'ksp_type': 'richardson',
-                          'ksp_max_it': 3,
+        # Pre-smoothing with a 4-point Jacobi method
+        # accelerated by Chebyshev
+        smootherparams = {'ksp_type': 'chebyshev',
+                          'ksp_max_it': 4,
                           'ksp_convergence_test': 'skip',
                           'ksp_initial_guess_nonzero': True,
                           'pc_type': 'bjacobi',
@@ -64,17 +62,30 @@ class P1HMultiGrid(object):
         L = assemble(-(inner(v, u)*dx +
                        omega_c2*dot(grad(v), grad(u))*dx))
 
+        # Firedrake GMG is broken for this problem...
+        # cparams = {"ksp_type": "preonly",
+        #            "pc_type": "mg",
+        #            "pc_mg_type": "full",
+        #            "mg_levels_ksp_type": "chebyshev",
+        #            "mg_levels_ksp_max_it": 2,
+        #            "mg_levels_pc_type": "bjacobi",
+        #            "mg_levels_sub_pc_type": "ilu"}
         cparams = {'ksp_type': 'preonly',
-                   'pc_type': 'gamg',
-                   'mg_levels': {'ksp_type': 'chebyshev',
-                                 'ksp_max_it': 2,
-                                 'pc_type': 'bjacobi',
-                                 'sub_pc_type': 'ilu'}}
+                   'pc_type': 'hypre',
+                   'pc_hypre_type': 'boomeramg',
+                   'pc_hypre_boomeramg_no_CF': False,
+                   'pc_hypre_boomeramg_coarsen_type': 'Falgout',
+                   'pc_hypre_boomeramg_interp_type': 'classical',
+                   'pc_hypre_boomeramg_P_max': 4,
+                   'pc_hypre_boomeramg_agg_nl': 1,
+                   'pc_hypre_boomeramg_max_level': 3,
+                   'pc_hypre_boomeramg_strong_threshold': 0.25}
         self._coarse_grid_solver = LinearSolver(L, solver_parameters=cparams)
 
-        # Post-smoothing with a 4-point ILU-bJacobi method
-        postsmoothparams = {'ksp_type': 'richardson',
-                            'ksp_max_it': 4,
+        # Post-smoothing with a 5-point bJacobi method
+        # accelerated with Chebyshev
+        postsmoothparams = {'ksp_type': 'chebyshev',
+                            'ksp_max_it': 5,
                             'ksp_convergence_test': 'skip',
                             'ksp_initial_guess_nonzero': True,
                             'pc_type': 'bjacobi',
