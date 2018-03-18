@@ -71,15 +71,15 @@ class P1HMultiGrid(object):
         #            "mg_levels_pc_type": "bjacobi",
         #            "mg_levels_sub_pc_type": "ilu"}
         cparams = {'ksp_type': 'preonly',
-                   'pc_type': 'hypre',
-                   'pc_hypre_type': 'boomeramg',
-                   'pc_hypre_boomeramg_no_CF': False,
-                   'pc_hypre_boomeramg_coarsen_type': 'Falgout',
-                   'pc_hypre_boomeramg_interp_type': 'classical',
-                   'pc_hypre_boomeramg_P_max': 4,
-                   'pc_hypre_boomeramg_agg_nl': 1,
-                   'pc_hypre_boomeramg_max_level': 3,
-                   'pc_hypre_boomeramg_strong_threshold': 0.25}
+                   'pc_type': 'gamg',
+                   'pc_gamg_reuse_interpolation': True,
+                   'pc_mg_type': 'full',
+                   'pc_mg_levels': 3,
+                   'mg_levels': {'ksp_type': 'chebyshev',
+                                 'ksp_chebyshev_esteig': True,
+                                 'ksp_max_it': 2,
+                                 'pc_type': 'bjacobi',
+                                 'sub_pc_type': 'ilu'}}
         self._coarse_grid_solver = LinearSolver(L, solver_parameters=cparams)
 
         # Post-smoothing with a 5-point bJacobi method
@@ -157,9 +157,7 @@ class P1HMultiGrid(object):
         """
 
         with self._trace_r.dat.vec as v:
-            temp = x.getSubVector(self._idx_set)
             x.copy(v)
-            x.restoreSubVector(self._idx_set, temp)
 
         self.solve(self.lambda_f, self._trace_r)
 
