@@ -4,6 +4,7 @@ from firedrake.parloops import par_loop, READ, INC
 from firedrake.utils import cached_property
 from pyop2.profiling import timed_stage, timed_region
 from ksp_monitor import KSPMonitorDummy
+from p1_hybrid_mg import P1HMultiGrid
 import numpy as np
 
 
@@ -72,6 +73,7 @@ class GravityWaveSolver(object):
         self._local_invert_method = local_invert_method
         self.monitor = monitor
         self.rtol = rtol
+        self.hybrid_mg = False
         if solver_type == "gamg":
             self.params = self.gamg_paramters
         elif solver_type == "preonly-gamg":
@@ -80,6 +82,10 @@ class GravityWaveSolver(object):
             self.params = self.hypre_parameters
         elif solver_type == "direct":
             self.params = self.direct_parameters
+        elif solver_type == "hybrid_mg":
+            self.params = {"ksp_type": "cg",
+                           "ksp_rtol": self.rtol}
+            self.hybrid_mg = True
         else:
             raise ValueError("Unknown inner solver type")
 
@@ -91,6 +97,7 @@ class GravityWaveSolver(object):
         self._dt_half_N2 = Constant(0.5*dt*N**2)
         self._dt_half_c2 = Constant(0.5*dt*c**2)
         self._omega_N2 = Constant((0.5*dt*N)**2)
+        self._omega_c2 = Constant((0.5*dt*c)**2)
 
         # Compatible finite element spaces
         self._Wmixed = W2 * W3
@@ -441,6 +448,13 @@ class GravityWaveSolver(object):
         # Set up linear solver
         linear_solver = LinearSolver(S, solver_parameters=self.params)
         self.linear_solver = linear_solver
+
+        if self.hybrid_mg:
+            pc = self.linear_solver.ksp.pc
+            pc.setType(pc.Type.PYTHON)
+            self._mgpc = P1HMultiGrid(S, Function(self._WT),
+                                      omega_c2=self._omega_c2)
+            pc.setPythonContext(self._mgpc)
 
         # Tensor for the residual
         u0, p0, b0 = self._state.split()
