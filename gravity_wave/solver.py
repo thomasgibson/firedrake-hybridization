@@ -159,7 +159,7 @@ class GravityWaveSolver(object):
     def direct_parameters(self):
         """Solver parameters using a direct method (LU)"""
 
-        inner_params = {'ksp_type': 'preonly',
+        inner_params = {'ksp_type': 'gmres',
                         'pc_type': 'lu',
                         'pc_factor_mat_solver_package': 'mumps'}
 
