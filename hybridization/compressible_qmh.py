@@ -48,13 +48,13 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
 
     :arg state: a :class:`.State` object containing everything else.
     :arg quadrature degree: tuple (q_h, q_v) where q_h is the required
-        quadrature degree in the horizontal direction and q_v is that
-        in the vertical direction.
+         quadrature degree in the horizontal direction and q_v is that in
+         the vertical direction.
     :arg solver_parameters (optional): solver parameters for the
-        trace system.
+         trace system.
     :arg overwrite_solver_parameters: boolean, if True use only the
-        solver_parameters that have been passed in, if False then update.
-        the default solver parameters with the solver_parameters passed in.
+         solver_parameters that have been passed in, if False then update.
+         the default solver parameters with the solver_parameters passed in.
     :arg moisture (optional): list of names of moisture fields.
     """
 
@@ -189,7 +189,7 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
                 - beta*cp*div(theta_w*V(w))*pibar*dxp
                 # following does nothing but is preserved in the comments
                 # to remind us why (because V(w) is purely vertical).
-                # + beta*cp*dot(theta_w*V(w), n)*self.pibar_avg('+')*dS_vp
+                # + beta*cp*dot(theta_w*V(w), n)*pibar_avg('+')*dS_vp
                 + beta*cp*dot(theta_w*V(w), n)*pibar_avg('+')*dS_hp
                 + beta*cp*dot(theta_w*V(w), n)*pibar_avg*ds_tbp
                 - beta*cp*div(thetabar_w*w)*pi*dxp
