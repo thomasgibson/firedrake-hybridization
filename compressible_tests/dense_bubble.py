@@ -19,8 +19,9 @@ delta_dt = {50.: 0.25,
             800.: 4.}
 
 PETSc.Log.begin()
-parser = ArgumentParser(description="""Dense bubble test by Straka et al (1993).""",
-                        add_help=False)
+parser = ArgumentParser(description="""
+Dense bubble test by Straka et al (1993).
+""", add_help=False)
 
 parser.add_argument("--delta",
                     default=800.0,
@@ -45,6 +46,10 @@ parser.add_argument("--dumpfreq",
                     type=int,
                     action="store",
                     help="Dump frequency of output files.")
+
+parser.add_argument("--debug",
+                    action="store_true",
+                    help="Turn on KSP monitors")
 
 parser.add_argument("--help",
                     action="store_true",
@@ -81,7 +86,8 @@ Test run: %s,\n
 Dump frequency: %s.\n
 """ % (hybrid, delta, bool(args.profile), bool(args.test), args.dumpfreq))
 
-PETSc.Sys.Print("Initializing problem with dt: %s and tmax: %s.\n" % (dt, tmax))
+PETSc.Sys.Print("Initializing problem with dt: %s and tmax: %s.\n" % (dt,
+                                                                      tmax))
 L = 51200.
 H = 6400.  # Height position of the model top
 
@@ -132,8 +138,32 @@ theta_b = Function(Vt).interpolate(Tsurf)
 rho_b = Function(Vr)
 
 # Calculate hydrostatic Pi
+params = {'pc_type': 'fieldsplit',
+          'pc_fieldsplit_type': 'schur',
+          'ksp_type': 'gmres',
+          'ksp_monitor_true_residual': True,
+          'ksp_max_it': 1000,
+          'ksp_gmres_restart': 50,
+          'pc_fieldsplit_schur_fact_type': 'FULL',
+          'pc_fieldsplit_schur_precondition': 'selfp',
+          'fieldsplit_0': {'ksp_type': 'preonly',
+                           'pc_type': 'bjacobi',
+                           'sub_pc_type': 'ilu'},
+          'fieldsplit_1': {'ksp_type': 'preonly',
+                           'pc_type': 'gamg',
+                           'pc_gamg_sym_graph': True,
+                           'mg_levels': {'ksp_type': 'chebyshev',
+                                         'ksp_chebyshev_esteig': True,
+                                         'ksp_max_it': 5,
+                                         'pc_type': 'bjacobi',
+                                         'sub_pc_type': 'ilu'}}}
+
 PETSc.Sys.Print("Computing hydrostatic Exner pressure...\n")
-compressible_hydrostatic_balance(state, theta_b, rho_b, solve_for_rho=True)
+compressible_hydrostatic_balance(state,
+                                 theta_b,
+                                 rho_b,
+                                 solve_for_rho=True,
+                                 params=params)
 
 x = SpatialCoordinate(mesh)
 a = 5.0e3
@@ -173,9 +203,44 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
 if hybrid:
-    linear_solver = HybridizedCompressibleSolver(state)
+    if args.debug:
+        solver_parameters = {'ksp_type': 'gmres',
+                             'pc_type': 'gamg',
+                             'ksp_rtol': 1.0e-8,
+                             'ksp_monitor_true_residual': True,
+                             'mg_levels': {'ksp_type': 'chebyshev',
+                                           'ksp_chebyshev_esteig': True,
+                                           'ksp_max_it': 2,
+                                           'pc_type': 'bjacobi',
+                                           'sub_pc_type': 'ilu'}}
+        linear_solver = HybridizedCompressibleSolver(state, solver_parameters=solver_parameters,
+                                                     overwrite_solver_parameters=True)
+    else:
+        linear_solver = HybridizedCompressibleSolver(state)
 else:
-    linear_solver = CompressibleSolver(state)
+    if args.debug:
+        solver_parameters = {'pc_type': 'fieldsplit',
+                             'pc_fieldsplit_type': 'schur',
+                             'ksp_type': 'gmres',
+                             'ksp_monitor_true_residual': True,
+                             'ksp_max_it': 100,
+                             'ksp_gmres_restart': 50,
+                             'pc_fieldsplit_schur_fact_type': 'FULL',
+                             'pc_fieldsplit_schur_precondition': 'selfp',
+                             'fieldsplit_0': {'ksp_type': 'preonly',
+                                              'pc_type': 'bjacobi',
+                                              'sub_pc_type': 'ilu'},
+                             'fieldsplit_1': {'ksp_type': 'preonly',
+                                              'pc_type': 'gamg',
+                                              'mg_levels': {'ksp_type': 'chebyshev',
+                                                            'ksp_chebyshev_esteig': True,
+                                                            'ksp_max_it': 1,
+                                                            'pc_type': 'bjacobi',
+                                                            'sub_pc_type': 'ilu'}}}
+        linear_solver = CompressibleSolver(state, solver_parameters=solver_parameters,
+                                           overwrite_solver_parameters=True)
+    else:
+        linear_solver = CompressibleSolver(state)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
