@@ -13,7 +13,6 @@ import sys
 
 day = 24.*60.*60.
 hour = 60.*60.
-dt = 30.
 
 PETSc.Log.begin()
 parser = ArgumentParser(description="""Euler-Boussinesq Eady slice model.""",
@@ -31,6 +30,22 @@ parser.add_argument("--profile",
                     action="store_true",
                     help="Turn on profiling for a 20 time-step run.")
 
+parser.add_argument("--dt",
+                    default=50.,
+                    type=float,
+                    action="store",
+                    help="Time step size (seconds)")
+
+parser.add_argument("--res",
+                    default=30,
+                    type=int,
+                    action="store",
+                    help="Resolution scaling parameter.")
+
+parser.add_argument("--debug",
+                    action="store_true",
+                    help="Turn on KSP monitors")
+
 parser.add_argument("--help",
                     action="store_true",
                     help="Show help.")
@@ -41,6 +56,9 @@ if args.help:
     help = parser.format_help()
     PETSc.Sys.Print("%s\n" % help)
     sys.exit(1)
+
+dt = args.dt
+res = args.res
 
 if args.profile:
     # Ensures accurate timing of parallel loops
@@ -66,12 +84,12 @@ PETSc.Sys.Print("Initializing problem with dt: %s and tmax: %s.\n" % (dt,
                                                                       tmax))
 
 # Construct 1d periodic base mesh
-columns = 30  # number of columns
+columns = 2*res  # number of columns
 L = 1000000.
 m = PeriodicRectangleMesh(columns, 1, 2.*L, 1.e5, quadrilateral=True)
 
 # Build 2D mesh by extruding the base mesh
-nlayers = 30  # horizontal layers
+nlayers = res    # horizontal layers
 H = 10000.  # height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
@@ -186,10 +204,39 @@ theta_pert = Function(Vt).interpolate(theta_exp)
 theta0.interpolate(theta_b + theta_pert)
 
 # Calculate hydrostatic Pi
-PETSc.Sys.Print("Computing hydrostatic Exner pressure...\n")
+PETSc.Sys.Print("Computing hydrostatic varaibles...\n")
+params = {'pc_type': 'fieldsplit',
+          'pc_fieldsplit_type': 'schur',
+          'ksp_type': 'gmres',
+          'ksp_monitor_true_residual': True,
+          'ksp_rtol': 1.0e-8,
+          'ksp_max_it': 1000,
+          'ksp_gmres_restart': 50,
+          'pc_fieldsplit_schur_fact_type': 'FULL',
+          'pc_fieldsplit_schur_precondition': 'selfp',
+          'fieldsplit_0': {'ksp_type': 'cg',
+                           'ksp_rtol': 1.0e-8,
+                           'pc_type': 'bjacobi',
+                           'sub_pc_type': 'ilu'},
+          'fieldsplit_1': {'ksp_type': 'cg',
+                           'ksp_rtol': 1.0e-8,
+                           'pc_type': 'gamg',
+                           'pc_gamg_sym_graph': True,
+                           'mg_levels': {'ksp_type': 'chebyshev',
+                                         'ksp_chebyshev_esteig': True,
+                                         'ksp_max_it': 5,
+                                         'pc_type': 'bjacobi',
+                                         'sub_pc_type': 'ilu'}}}
+
 rho_b = Function(Vr)
-compressible_hydrostatic_balance(state, theta_b, rho_b)
-compressible_hydrostatic_balance(state, theta0, rho0)
+compressible_hydrostatic_balance(state,
+                                 theta_b,
+                                 rho_b,
+                                 params=params)
+compressible_hydrostatic_balance(state,
+                                 theta0,
+                                 rho0,
+                                 params=params)
 
 # Set Pi0
 Pi0 = calculate_Pi0(state, theta0, rho0)
@@ -198,7 +245,7 @@ state.parameters.Pi0 = Pi0
 # Set x component of velocity
 cp = state.parameters.cp
 dthetady = state.parameters.dthetady
-Pi = exner(theta0, rho0, state)
+Pi = thermodynamics.pi(state.parameters, rho0, theta0)
 u = cp*dthetady/f*(Pi-Pi0)
 
 # Set y component of velocity
@@ -233,38 +280,40 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 if hybrid:
     linear_solver_params = {'ksp_type': 'gmres',
                             'pc_type': 'gamg',
-                            'ksp_monitor_true_residual': True,
                             'pc_gamg_sym_graph': True,
                             'mg_levels': {'ksp_type': 'chebyshev',
                                           'ksp_chebyshev_esteig': True,
                                           'ksp_max_it': 5,
                                           'pc_type': 'bjacobi',
                                           'sub_pc_type': 'ilu'}}
+    if args.debug:
+        linear_solver_params['ksp_monitor_true_residual'] = True
+
     linear_solver = HybridizedCompressibleSolver(state, solver_parameters=linear_solver_params,
                                                  overwrite_solver_parameters=True)
 
 else:
-    linear_solver_params = {
-        'ksp_monitor_true_residual': True,
-        'pc_type': 'fieldsplit',
-        'pc_fieldsplit_type': 'schur',
-        'ksp_type': 'gmres',
-        'ksp_max_it': 100,
-        'ksp_gmres_restart': 50,
-        'pc_fieldsplit_schur_fact_type': 'FULL',
-        'pc_fieldsplit_schur_precondition': 'selfp',
-        'fieldsplit_0': {'ksp_type': 'preonly',
-                         'pc_type': 'bjacobi',
-                         'sub_pc_type': 'ilu'},
-        'fieldsplit_1': {'ksp_type': 'preonly',
-                         'pc_type': 'gamg',
-                         'pc_gamg_sym_graph': True,
-                         'mg_levels': {'ksp_type': 'chebyshev',
-                                       'ksp_chebyshev_esteig': True,
-                                       'ksp_max_it': 5,
-                                       'pc_type': 'bjacobi',
-                                       'sub_pc_type': 'ilu'}}
-    }
+    linear_solver_params = {'pc_type': 'fieldsplit',
+                            'pc_fieldsplit_type': 'schur',
+                            'ksp_type': 'gmres',
+                            'ksp_max_it': 100,
+                            'ksp_gmres_restart': 50,
+                            'pc_fieldsplit_schur_fact_type': 'FULL',
+                            'pc_fieldsplit_schur_precondition': 'selfp',
+                            'fieldsplit_0': {'ksp_type': 'preonly',
+                                             'pc_type': 'bjacobi',
+                                             'sub_pc_type': 'ilu'},
+                            'fieldsplit_1': {'ksp_type': 'preonly',
+                                             'pc_type': 'gamg',
+                                             'pc_gamg_sym_graph': True,
+                                             'mg_levels': {'ksp_type': 'chebyshev',
+                                                           'ksp_chebyshev_esteig': True,
+                                                           'ksp_max_it': 5,
+                                                           'pc_type': 'bjacobi',
+                                                           'sub_pc_type': 'ilu'}}}
+    if args.debug:
+        linear_solver_params['ksp_monitor_true_residual'] = True
+
     linear_solver = CompressibleSolver(state, solver_parameters=linear_solver_params,
                                        overwrite_solver_parameters=True)
 
