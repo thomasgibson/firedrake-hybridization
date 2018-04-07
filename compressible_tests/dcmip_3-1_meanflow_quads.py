@@ -273,6 +273,9 @@ if hybrid:
     if args.mgksp == 'chebyshev':
         mg_params['ksp_chebyshev_esteig'] = True
 
+    if args.mgksp == 'richardson':
+        mg_params['ksp_richardson_self_scale'] = True
+
     solver_parameters = {'ksp_type': '%s' % args.hksp,
                          'ksp_rtol': 1.0e-8,
                          'pc_type': 'gamg',
@@ -281,6 +284,10 @@ if hybrid:
     if args.debug:
         solver_parameters['ksp_monitor_true_residual'] = True
 
+    PETSc.Sys.Print("""
+    Full solver options:\n
+    %s
+    """ % solver_parameters)
     linear_solver = HybridizedCompressibleSolver(state, solver_parameters=solver_parameters,
                                                  overwrite_solver_parameters=True)
 else:
@@ -297,6 +304,9 @@ else:
 
     if args.mgksp == 'chebyshev':
         mg_params['ksp_chebyshev_esteig'] = True
+
+    if args.mgksp == 'richardson':
+        mg_params['ksp_richardson_self_scale'] = True
 
     solver_parameters = {'pc_type': 'fieldsplit',
                          'pc_fieldsplit_type': 'schur',
@@ -315,6 +325,10 @@ else:
     if args.debug:
         solver_parameters['ksp_monitor_true_residual'] = True
 
+    PETSc.Sys.Print("""
+    Full solver options:\n
+    %s
+    """ % solver_parameters)
     linear_solver = CompressibleSolver(state, solver_parameters=solver_parameters,
                                        overwrite_solver_parameters=True)
 
