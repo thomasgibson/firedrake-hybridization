@@ -278,11 +278,10 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
 if hybrid:
-    linear_solver_params = {'ksp_type': 'gmres',
+    linear_solver_params = {'ksp_type': 'bcgs',
                             'pc_type': 'gamg',
                             'pc_gamg_sym_graph': True,
-                            'mg_levels': {'ksp_type': 'chebyshev',
-                                          'ksp_chebyshev_esteig': True,
+                            'mg_levels': {'ksp_type': 'richardson',
                                           'ksp_max_it': 5,
                                           'pc_type': 'bjacobi',
                                           'sub_pc_type': 'ilu'}}

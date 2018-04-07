@@ -273,9 +273,6 @@ if hybrid:
     if args.mgksp == 'chebyshev':
         mg_params['ksp_chebyshev_esteig'] = True
 
-    if args.mgksp == 'richardson':
-        mg_params['ksp_richardson_self_scale'] = True
-
     solver_parameters = {'ksp_type': '%s' % args.hksp,
                          'ksp_rtol': 1.0e-8,
                          'pc_type': 'gamg',
@@ -304,9 +301,6 @@ else:
 
     if args.mgksp == 'chebyshev':
         mg_params['ksp_chebyshev_esteig'] = True
-
-    if args.mgksp == 'richardson':
-        mg_params['ksp_richardson_self_scale'] = True
 
     solver_parameters = {'pc_type': 'fieldsplit',
                          'pc_fieldsplit_type': 'schur',
