@@ -61,6 +61,22 @@ parser.add_argument("--debug",
                     action="store_true",
                     help="Turn on KSP monitors")
 
+parser.add_argument("--hksp",
+                    default="gmres",
+                    action="store",
+                    help="KSP for hybridized system.")
+
+parser.add_argument("--mgksp",
+                    default="chebyshev",
+                    action="store",
+                    help="KSP for mg levels.")
+
+parser.add_argument("--mgkspmaxit",
+                    default=5,
+                    type=int,
+                    action="store",
+                    help="Max KSP iterations for mg levels.")
+
 parser.add_argument("--help",
                     action="store_true",
                     help="Show help.")
@@ -98,7 +114,7 @@ Profiling: %s,\n
 Max time: %s,\n
 Dump frequency: %s.\n
 """ % (hybrid, dt, refinements, nlayers,
-       bool(args.profile), bool(args.tmax), args.dumpfreq))
+       bool(args.profile), args.tmax, args.dumpfreq))
 
 PETSc.Sys.Print("Initializing problem with dt: %s and tmax: %s.\n" % (dt,
                                                                       tmax))
@@ -243,21 +259,45 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
 if hybrid:
-    solver_parameters = {'ksp_type': 'gmres',
+    PETSc.Sys.Print("""
+    Setting up hybridized solver with KSP: %s\n
+    KSP on GAMG MG levels: %s\n
+    Maximum iter on MG levels: %s\n
+    """ % (args.hksp, args.mgksp, args.mgkspmaxit))
+
+    mg_params = {'ksp_type': '%s' % args.mgksp,
+                 'ksp_max_it': args.mgkspmaxit,
+                 'pc_type': 'bjacobi',
+                 'sub_pc_type': 'ilu'}
+
+    if args.mgksp == 'chebyshev':
+        mg_params['ksp_chebyshev_esteig'] = True
+
+    solver_parameters = {'ksp_type': '%s' % args.hksp,
                          'ksp_rtol': 1.0e-8,
                          'pc_type': 'gamg',
                          'pc_gamg_sym_graph': True,
-                         'mg_levels': {'ksp_type': 'chebyshev',
-                                       'ksp_chebyshev_esteig': True,
-                                       'ksp_max_it': 5,
-                                       'pc_type': 'bjacobi',
-                                       'sub_pc_type': 'ilu'}}
+                         'mg_levels': mg_params}
     if args.debug:
         solver_parameters['ksp_monitor_true_residual'] = True
 
     linear_solver = HybridizedCompressibleSolver(state, solver_parameters=solver_parameters,
                                                  overwrite_solver_parameters=True)
 else:
+    PETSc.Sys.Print("""
+    Setting up GMRES fieldsplit solver with Schur complement PC.\n
+    KSP on GAMG MG levels for fieldsplit 1: %s\n
+    Maximum iter on MG levels: %s\n
+    """ % (args.mgksp, args.mgkspmaxit))
+
+    mg_params = {'ksp_type': '%s' % args.mgksp,
+                 'ksp_max_it': args.mgkspmaxit,
+                 'pc_type': 'bjacobi',
+                 'sub_pc_type': 'ilu'}
+
+    if args.mgksp == 'chebyshev':
+        mg_params['ksp_chebyshev_esteig'] = True
+
     solver_parameters = {'pc_type': 'fieldsplit',
                          'pc_fieldsplit_type': 'schur',
                          'ksp_type': 'gmres',
@@ -271,11 +311,7 @@ else:
                          'fieldsplit_1': {'ksp_type': 'preonly',
                                           'pc_type': 'gamg',
                                           'pc_gamg_sym_graph': True,
-                                          'mg_levels': {'ksp_type': 'chebyshev',
-                                                        'ksp_chebyshev_esteig': True,
-                                                        'ksp_max_it': 5,
-                                                        'pc_type': 'bjacobi',
-                                                        'sub_pc_type': 'ilu'}}}
+                                          'mg_levels': mg_params}}
     if args.debug:
         solver_parameters['ksp_monitor_true_residual'] = True
 
