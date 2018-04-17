@@ -2,7 +2,7 @@ from firedrake import split, LinearVariationalProblem, \
     LinearVariationalSolver, TestFunctions, TrialFunctions, \
     TestFunction, TrialFunction, lhs, rhs, FacetNormal, \
     div, dx, avg, dS_v, dS_h, ds_v, ds_t, ds_b, ds_tb, inner, \
-    dot, grad, MixedFunctionSpace, FunctionSpace, Function, \
+    dot, grad, cross, MixedFunctionSpace, FunctionSpace, Function, \
     BrokenElement, assemble, LinearSolver, Tensor, \
     AssembledVector, DirichletBC
 
@@ -184,9 +184,14 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
             theta_w = theta
             thetabar_w = thetabar
 
+        # Coriolis parameter
+        f = state.fields("coriolis")
+
         # "broken" u and rho system
         Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
                 - beta*cp*div(theta_w*V(w))*pibar*dxp
+                # Coriolis term
+                + beta*inner(w, f*cross(k, u))*dx
                 # following does nothing but is preserved in the comments
                 # to remind us why (because V(w) is purely vertical).
                 # + beta*cp*dot(theta_w*V(w), n)*pibar_avg('+')*dS_vp
