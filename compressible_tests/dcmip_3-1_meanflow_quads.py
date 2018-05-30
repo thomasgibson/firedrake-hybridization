@@ -256,7 +256,7 @@ if hybrid:
                  'pc_type': 'bjacobi',
                  'sub_pc_type': 'ilu'}
 
-    solver_parameters = {'ksp_type': 'bcgs',
+    solver_parameters = {'ksp_type': 'gmres',
                          'ksp_rtol': args.rtol,
                          'pc_type': 'gamg',
                          'pc_gamg_sym_graph': True,
