@@ -7,6 +7,7 @@ from firedrake import split, LinearVariationalProblem, \
     AssembledVector, DirichletBC
 
 from firedrake.parloops import par_loop, READ, INC
+from pyop2.profiling import timed_function, timed_region
 
 from gusto.linear_solvers import TimesteppingSolver
 from gusto import thermodynamics
@@ -63,8 +64,7 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
     solver_parameters = {'ksp_type': 'gmres',
                          'pc_type': 'gamg',
                          'ksp_rtol': 1.0e-8,
-                         'mg_levels': {'ksp_type': 'chebyshev',
-                                       'ksp_chebyshev_esteig': True,
+                         'mg_levels': {'ksp_type': 'richardson',
                                        'ksp_max_it': 2,
                                        'pc_type': 'bjacobi',
                                        'sub_pc_type': 'ilu'}}
@@ -86,6 +86,7 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
 
         super().__init__(state, solver_parameters, overwrite_solver_parameters)
 
+    @timed_function("Gusto:SolverSetup")
     def _setup_solver(self):
         from firedrake.assemble import create_assembly_callable
         import numpy as np
@@ -150,7 +151,7 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
 
         # Mass matrix for the trace space
         tM = assemble(dl('+')*l0('+')*(dS_v + dS_h)
-                      + dl*l0*ds_v + dl*l0*ds_tb)
+                      + dl*l0*ds_v + dl*l0*(ds_t + ds_b))
 
         Lrhobar = Function(Vtrace)
         Lpibar = Function(Vtrace)
@@ -164,14 +165,17 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
 
         def _traceRHS(f):
             return (dl('+')*avg(f)*(dS_v + dS_h)
-                    + dl*f*ds_v + dl*f*ds_tb)
+                    + dl*f*ds_v + dl*f*(ds_t + ds_b))
 
         assemble(_traceRHS(rhobar), tensor=Lrhobar)
         assemble(_traceRHS(pibar), tensor=Lpibar)
 
         # Project averages of coefficients into the trace space
-        rhopi_solver.solve(rhobar_avg, Lrhobar)
-        rhopi_solver.solve(pibar_avg, Lpibar)
+        with timed_region("Gusto:HybridProjectRhobar"):
+            rhopi_solver.solve(rhobar_avg, Lrhobar)
+
+        with timed_region("Gusto:HybridProjectPibar"):
+            rhopi_solver.solve(pibar_avg, Lpibar)
 
         # Add effect of density of water upon theta
         if self.moisture is not None:
@@ -184,14 +188,9 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
             theta_w = theta
             thetabar_w = thetabar
 
-        # Coriolis parameter
-        f = state.fields("coriolis")
-
         # "broken" u and rho system
         Aeqn = (inner(w, (state.h_project(u) - u_in))*dx
                 - beta*cp*div(theta_w*V(w))*pibar*dxp
-                # Coriolis term
-                + beta*inner(w, f*cross(k, u))*dx
                 # following does nothing but is preserved in the comments
                 # to remind us why (because V(w) is purely vertical).
                 # + beta*cp*dot(theta_w*V(w), n)*pibar_avg('+')*dS_vp
@@ -230,11 +229,13 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
 
         # Schur complement operator:
         Smatexp = K.T * A.inv * K
-        S = assemble(Smatexp)
-        S.force_evaluation()
+        with timed_region("Gusto:HybridAssembleTraceOp"):
+            S = assemble(Smatexp)
+            S.force_evaluation()
 
         # Set up the Linear solver for the system of Lagrange multipliers
-        self.lSolver = LinearSolver(S, solver_parameters=self.solver_parameters,
+        self.lSolver = LinearSolver(S,
+                                    solver_parameters=self.solver_parameters,
                                     options_prefix='lambda_solve')
 
         # Result function for the multiplier solution
@@ -258,12 +259,14 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
 
         # rho reconstruction
         Srho = A11 - A10 * A00.inv * A01
-        rho_expr = Srho.inv * (Rrho - A10 * A00.inv * (Ru - K0 * lambda_vec))
+        rho_expr = Srho.solve(Rrho - A10 * A00.inv * (Ru - K0 * lambda_vec),
+                              decomposition="PartialPivLU")
         self._assemble_rho = create_assembly_callable(rho_expr, tensor=rho_)
 
         # "broken" u reconstruction
         rho_vec = AssembledVector(rho_)
-        u_expr = A00.inv * (Ru - A01 * rho_vec - K0 * lambda_vec)
+        u_expr = A00.solve(Ru - A01 * rho_vec - K0 * lambda_vec,
+                           decomposition="PartialPivLU")
         self._assemble_u = create_assembly_callable(u_expr, tensor=u_)
 
         # Project broken u into the HDiv space using facet averaging.
@@ -309,33 +312,43 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
         self.bcs = [DirichletBC(Vu, 0.0, "bottom"),
                     DirichletBC(Vu, 0.0, "top")]
 
+    @timed_function("Gusto:LinearSolve")
     def solve(self):
         """
         Apply the solver with rhs state.xrhs and result state.dy.
         """
 
-        # Assemble the RHS for lambda into self.R
-        self._assemble_Rexp()
+        # Solve the velocity-density system
+        with timed_region("Gusto:VelocityDensitySolve"):
 
-        # Solve for lambda
-        self.lSolver.solve(self.lambdar, self.R)
+            # Assemble the RHS for lambda into self.R
+            with timed_region("Gusto:HybridRHS"):
+                self._assemble_Rexp()
 
-        # Reconstruct broken u and rho
-        self._assemble_rho()
-        self._assemble_u()
+            # Solve for lambda
+            with timed_region("Gusto:HybridTraceSolve"):
+                self.lSolver.solve(self.lambdar, self.R)
 
-        broken_u, rho1 = self.urho.split()
-        u1 = self.u_hdiv
+            # Reconstruct broken u and rho
+            with timed_region("Gusto:HybridRecon"):
+                self._assemble_rho()
+                self._assemble_u()
 
-        # Project broken_u into the HDiv space
-        u1.assign(0.0)
-        par_loop(self._average_kernel, dx,
-                 {"w": (self._weight, READ),
-                  "vec_in": (broken_u, READ),
-                  "vec_out": (u1, INC)})
+            broken_u, rho1 = self.urho.split()
+            u1 = self.u_hdiv
 
-        for bc in self.bcs:
-            bc.apply(u1)
+            # Project broken_u into the HDiv space
+            u1.assign(0.0)
+
+            with timed_region("Gusto:HybridProjectHDiv"):
+                par_loop(self._average_kernel, dx,
+                         {"w": (self._weight, READ),
+                          "vec_in": (broken_u, READ),
+                          "vec_out": (u1, INC)})
+
+            # Reapply bcs to ensure they are satisfied
+            for bc in self.bcs:
+                bc.apply(u1)
 
         # Copy back into u and rho cpts of dy
         u, rho, theta = self.state.dy.split()
@@ -343,7 +356,8 @@ class HybridizedCompressibleSolver(TimesteppingSolver):
         rho.assign(rho1)
 
         # Reconstruct theta
-        self.theta_solver.solve()
+        with timed_region("Gusto:ThetaRecon"):
+            self.theta_solver.solve()
 
         # Copy into theta cpt of dy
         theta.assign(self.theta)
