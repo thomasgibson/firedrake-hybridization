@@ -2,12 +2,15 @@ from gusto import *
 from firedrake import CubedSphereMesh, ExtrudedMesh, Expression, \
     VectorFunctionSpace, FunctionSpace, Function, SpatialCoordinate, \
     as_vector
-from firedrake import exp, acos, cos, sin
+from firedrake import exp, acos, cos, sin, parameters
 from hybridization import HybridizedCompressibleSolver
 from firedrake.petsc import PETSc
 from argparse import ArgumentParser
 import numpy as np
 import sys
+
+
+parameters["pyop2_options"]["lazy_evaluation"] = False
 
 
 PETSc.Log.begin()
@@ -28,13 +31,13 @@ parser.add_argument("--profile",
                     help="Turn on profiling.")
 
 parser.add_argument("--dumpfreq",
-                    default=1,
+                    default=100,
                     type=int,
                     action="store",
                     help="Dump frequency of output files.")
 
 parser.add_argument("--dt",
-                    default=5.,
+                    default=10.,
                     type=float,
                     action="store",
                     help="Time step size (seconds)")
@@ -61,21 +64,10 @@ parser.add_argument("--debug",
                     action="store_true",
                     help="Turn on KSP monitors")
 
-parser.add_argument("--hksp",
-                    default="gmres",
-                    action="store",
-                    help="KSP for hybridized system.")
-
-parser.add_argument("--mgksp",
-                    default="chebyshev",
-                    action="store",
-                    help="KSP for mg levels.")
-
-parser.add_argument("--mgkspmaxit",
-                    default=5,
-                    type=int,
-                    action="store",
-                    help="Max KSP iterations for mg levels.")
+parser.add_argument("--rtol",
+                    default=1.0e-6,
+                    type=float,
+                    help="Rtolerance for the linear solve.")
 
 parser.add_argument("--help",
                     action="store_true",
@@ -95,9 +87,7 @@ nlayers = args.layers           # Number of vertical layers
 refinements = args.refinements  # Number of horiz. cells = 20*(4^refinements)
 
 if args.profile:
-    # Ensures accurate timing of parallel loops
-    parameters["pyop2_options"]["lazy_evaluation"] = False
-    tmax = 20*dt
+    tmax = 5*dt
 
 if args.test:
     tmax = dt
@@ -260,21 +250,14 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 # Set up linear solver
 if hybrid:
     PETSc.Sys.Print("""
-    Setting up hybridized solver with KSP: %s\n
-    KSP on GAMG MG levels: %s\n
-    Maximum iter on MG levels: %s\n
-    """ % (args.hksp, args.mgksp, args.mgkspmaxit))
+    Setting up hybridized solver with BCGS + GAMG on the traces.""")
 
-    mg_params = {'ksp_type': '%s' % args.mgksp,
-                 'ksp_max_it': args.mgkspmaxit,
-                 'pc_type': 'bjacobi',
-                 'sub_pc_type': 'ilu'}
+    mg_params = {'ksp_type': 'richardson',
+                 'ksp_max_it': 3,
+                 'pc_type': 'sor'}
 
-    if args.mgksp == 'chebyshev':
-        mg_params['ksp_chebyshev_esteig'] = True
-
-    solver_parameters = {'ksp_type': '%s' % args.hksp,
-                         'ksp_rtol': 1.0e-8,
+    solver_parameters = {'ksp_type': 'bcgs',
+                         'ksp_rtol': args.rtol,
                          'pc_type': 'gamg',
                          'pc_gamg_sym_graph': True,
                          'mg_levels': mg_params}
@@ -285,26 +268,24 @@ if hybrid:
     Full solver options:\n
     %s
     """ % solver_parameters)
-    linear_solver = HybridizedCompressibleSolver(state, solver_parameters=solver_parameters,
+    linear_solver = HybridizedCompressibleSolver(state,
+                                                 solver_parameters=solver_parameters,
                                                  overwrite_solver_parameters=True)
 else:
     PETSc.Sys.Print("""
-    Setting up GMRES fieldsplit solver with Schur complement PC.\n
-    KSP on GAMG MG levels for fieldsplit 1: %s\n
-    Maximum iter on MG levels: %s\n
-    """ % (args.mgksp, args.mgkspmaxit))
+    Setting up GMRES fieldsplit solver with Schur complement PC.""")
 
-    mg_params = {'ksp_type': '%s' % args.mgksp,
-                 'ksp_max_it': args.mgkspmaxit,
+    # Aggressive AMG procedure
+    mg_params = {'ksp_type': 'chebyshev',
+                 'ksp_chebyshev_esteig': True,
+                 'ksp_max_it': 2,
                  'pc_type': 'bjacobi',
                  'sub_pc_type': 'ilu'}
-
-    if args.mgksp == 'chebyshev':
-        mg_params['ksp_chebyshev_esteig'] = True
 
     solver_parameters = {'pc_type': 'fieldsplit',
                          'pc_fieldsplit_type': 'schur',
                          'ksp_type': 'gmres',
+                         'ksp_rtol': args.rtol,
                          'ksp_max_it': 100,
                          'ksp_gmres_restart': 50,
                          'pc_fieldsplit_schur_fact_type': 'FULL',
@@ -323,7 +304,8 @@ else:
     Full solver options:\n
     %s
     """ % solver_parameters)
-    linear_solver = CompressibleSolver(state, solver_parameters=solver_parameters,
+    linear_solver = CompressibleSolver(state,
+                                       solver_parameters=solver_parameters,
                                        overwrite_solver_parameters=True)
 
 # Set up forcing
