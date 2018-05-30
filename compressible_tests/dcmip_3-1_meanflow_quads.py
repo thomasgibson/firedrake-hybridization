@@ -252,7 +252,7 @@ if hybrid:
     Setting up hybridized solver with BCGS + GAMG on the traces.""")
 
     mg_params = {'ksp_type': 'richardson',
-                 'ksp_max_it': 3,
+                 'ksp_max_it': 5,
                  'pc_type': 'bjacobi',
                  'sub_pc_type': 'ilu'}
 
