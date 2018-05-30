@@ -254,12 +254,14 @@ if hybrid:
 
     mg_params = {'ksp_type': 'richardson',
                  'ksp_max_it': 3,
-                 'pc_type': 'sor'}
+                 'pc_type': 'bjacobi',
+                 'sub_pc_type': 'ilu'}
 
     solver_parameters = {'ksp_type': 'bcgs',
                          'ksp_rtol': args.rtol,
                          'pc_type': 'gamg',
                          'pc_gamg_sym_graph': True,
+                         'pc_gamg_reuse_interpolation': True,
                          'mg_levels': mg_params}
     if args.debug:
         solver_parameters['ksp_monitor_true_residual'] = True
@@ -296,6 +298,7 @@ else:
                          'fieldsplit_1': {'ksp_type': 'preonly',
                                           'pc_type': 'gamg',
                                           'pc_gamg_sym_graph': True,
+                                          'pc_gamg_reuse_interpolation': True,
                                           'mg_levels': mg_params}}
     if args.debug:
         solver_parameters['ksp_monitor_true_residual'] = True
