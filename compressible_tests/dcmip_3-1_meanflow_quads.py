@@ -3,7 +3,6 @@ from firedrake import CubedSphereMesh, ExtrudedMesh, Expression, \
     VectorFunctionSpace, FunctionSpace, Function, SpatialCoordinate, \
     as_vector
 from firedrake import exp, acos, cos, sin, parameters
-from hybridization import HybridizedCompressibleSolver
 from firedrake.petsc import PETSc
 from argparse import ArgumentParser
 import numpy as np
