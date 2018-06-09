@@ -1,10 +1,10 @@
 from gusto import *
 import itertools
 from firedrake import as_vector, SpatialCoordinate, PeriodicIntervalMesh, \
-    ExtrudedMesh, exp, sin, Function, parameters
+    ExtrudedMesh, exp, sin, Function, parameters, FunctionSpace, \
+    VectorFunctionSpace, BrokenElement
 from firedrake.petsc import PETSc
 from argparse import ArgumentParser
-from hybridization import HybridizedCompressibleSolver
 import numpy as np
 import sys
 
@@ -26,23 +26,21 @@ parser.add_argument("--profile",
                     action="store_true",
                     help="Turn on profiling for a 20 time-step run.")
 
+parser.add_argument("--dt",
+                    action="store",
+                    default=10.0,
+                    type=float,
+                    help="Time step size (s)")
+
+parser.add_argument("--recovered",
+                    action="store_true",
+                    help="Use recovered spaces advection scheme.")
+
 parser.add_argument("--dumpfreq",
                     default=5,
                     type=int,
                     action="store",
                     help="Dump frequency of output files.")
-
-parser.add_argument("--dt",
-                    default=6.,
-                    type=float,
-                    action="store",
-                    help="Time step size (seconds)")
-
-parser.add_argument("--res",
-                    default=10,
-                    type=int,
-                    action="store",
-                    help="Resolution scaling parameter.")
 
 parser.add_argument("--debug",
                     action="store_true",
@@ -52,9 +50,6 @@ parser.add_argument("--help",
                     action="store_true",
                     help="Show help.")
 
-
-# Good dt/res combinations: (6/10 or 6/20, and 3/40)
-
 args, _ = parser.parse_known_args()
 
 if args.help:
@@ -62,8 +57,39 @@ if args.help:
     PETSc.Sys.Print("%s\n" % help)
     sys.exit(1)
 
-dt = args.dt
-res = args.res
+hybrid = bool(args.hybridization)
+
+H = 1.0e4  # Height position of the model top
+L = 3.0e5
+
+nlayers = 10         # horizontal layers
+columns = 300        # number of columns
+dt = args.dt         # Time steps (s)
+
+PETSc.Sys.Print("""
+Number of vertical layers: %s,\n
+Number of horizontal columns: %s.\n
+""" % (nlayers, columns))
+
+m = PeriodicIntervalMesh(columns, L)
+
+dx = L / columns
+cfl = 20.0 * dt / dx
+dz = H / nlayers
+
+PETSc.Sys.Print("""
+Problem parameters:\n
+Test case: Skamarock and Klemp gravity wave.\n
+Hybridized compressible solver: %s,\n
+Time-step size: %s,\n
+Profiling: %s,\n
+Test run: %s,\n
+Dx (m): %s,\n
+Dz (m): %s,\n
+CFL: %s,\n
+Dump frequency: %s.\n
+""" % (hybrid, dt, bool(args.profile), bool(args.test),
+       dx, dz, cfl, args.dumpfreq))
 
 if args.profile:
     # Ensures accurate timing of parallel loops
@@ -76,32 +102,8 @@ if args.test:
 if not args.test and not args.profile:
     tmax = 3600.
 
-hybrid = bool(args.hybridization)
-PETSc.Sys.Print("""
-Problem parameters:\n
-Test case: Skamarock and Klemp gravity wave.\n
-Hybridized compressible solver: %s,\n
-Time-step size: %s,\n
-Resolution scaling: %s,\n
-Profiling: %s,\n
-Test run: %s,\n
-Dump frequency: %s.\n
-""" % (hybrid, dt, res, bool(args.profile), bool(args.test), args.dumpfreq))
-
 PETSc.Sys.Print("Initializing problem with dt: %s and tmax: %s.\n" % (dt,
                                                                       tmax))
-H = 1.0e4  # Height position of the model top
-L = 3.0e5
-
-nlayers = res     # horizontal layers
-columns = res*15     # number of columns
-
-PETSc.Sys.Print("""
-Number of vertical layers: %s,\n
-Number of horizontal columns: %s.\n
-""" % (nlayers, columns))
-
-m = PeriodicIntervalMesh(columns, L)
 
 # build volume mesh
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
@@ -110,9 +112,9 @@ fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
 
 if hybrid:
-    dirname = 'hybrid_sk_nonlinear_res%s_dt%s' % (res, dt)
+    dirname = 'hybrid_sk_nonlinear_dx%s_dz%s_dt%s' % (dx, dz, dt)
 else:
-    dirname = 'sk_nonlinear_res%s_dt%s' % (res, dt)
+    dirname = 'sk_nonlinear_dx%s_dz%s_dt%s' % (dx, dz, dt)
 
 points_x = np.linspace(0., L, 100)
 points_z = [H/2.]
@@ -181,32 +183,52 @@ state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
 # Set up advection schemes
-ueqn = EulerPoincare(state, Vu)
-rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-
-supg = True
-if supg:
-    thetaeqn = SUPGAdvection(state, Vt,
-                             supg_params={"dg_direction": "horizontal"},
-                             equation_form="advective")
-else:
-    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
-
 advected_fields = []
-advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+recovered = args.recovered
+if recovered:
+    VDG1 = FunctionSpace(mesh, "DG", 1)
+    VCG1 = FunctionSpace(mesh, "CG", 1)
+    Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
+    Vu_DG1 = VectorFunctionSpace(mesh, "DG", 1)
+    Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
+
+    u_spaces = (Vu_DG1, Vu_CG1, Vu)
+    rho_spaces = (VDG1, VCG1, Vr)
+    theta_spaces = (VDG1, VCG1, Vt_brok)
+
+    ueqn = EmbeddedDGAdvection(state, Vu, equation_form="advective",
+                               recovered_spaces=u_spaces)
+    rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity",
+                                 recovered_spaces=rho_spaces)
+    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective",
+                                   recovered_spaces=theta_spaces)
+    advected_fields.append(('u', SSPRK3(state, u0, ueqn)))
+else:
+    ueqn = EulerPoincare(state, Vu)
+    rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
+
+    supg = True
+    if supg:
+        thetaeqn = SUPGAdvection(state, Vt,
+                                 supg_params={"dg_direction": "horizontal"},
+                                 equation_form="advective")
+    else:
+        thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
+
+    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
+
 advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
 advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
 if hybrid:
     if args.debug:
-        solver_parameters = {'ksp_type': 'gmres',
+        solver_parameters = {'ksp_type': 'fgmres',
                              'pc_type': 'gamg',
                              'ksp_rtol': 1.0e-8,
                              'ksp_monitor_true_residual': True,
-                             'mg_levels': {'ksp_type': 'chebyshev',
-                                           'ksp_chebyshev_esteig': True,
-                                           'ksp_max_it': 2,
+                             'mg_levels': {'ksp_type': 'gmres',
+                                           'ksp_max_it': 3,
                                            'pc_type': 'bjacobi',
                                            'sub_pc_type': 'ilu'}}
         linear_solver = HybridizedCompressibleSolver(state, solver_parameters=solver_parameters,
@@ -241,7 +263,10 @@ else:
         linear_solver = CompressibleSolver(state)
 
 # Set up forcing
-compressible_forcing = CompressibleForcing(state)
+if recovered:
+    compressible_forcing = CompressibleForcing(state, euler_poincare=False)
+else:
+    compressible_forcing = CompressibleForcing(state)
 
 # Build time stepper
 stepper = CrankNicolson(state, advected_fields, linear_solver,
