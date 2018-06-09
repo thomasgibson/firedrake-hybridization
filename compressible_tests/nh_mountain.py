@@ -64,9 +64,9 @@ if args.help:
 
 hybrid = bool(args.hybridization)
 
-nlayers = 70          # horizontal layers
-columns = 180         # number of columns
-dt = args.dt          # Time steps (s)
+nlayers = 140          # horizontal layers
+columns = 360          # number of columns
+dt = args.dt           # Time steps (s)
 
 H = 35000.  # Height position of the model top
 L = 144000.
