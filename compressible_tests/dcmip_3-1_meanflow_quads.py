@@ -1,7 +1,7 @@
 from gusto import *
 from firedrake import CubedSphereMesh, ExtrudedMesh, Expression, \
     VectorFunctionSpace, FunctionSpace, Function, SpatialCoordinate, \
-    as_vector
+    as_vector, DumbCheckpoint, interpolate, CellVolume, sqrt
 from firedrake import exp, acos, cos, sin, parameters
 from firedrake.petsc import PETSc
 from argparse import ArgumentParser
@@ -35,11 +35,11 @@ parser.add_argument("--dumpfreq",
                     action="store",
                     help="Dump frequency of output files.")
 
-parser.add_argument("--dt",
-                    default=10.,
+parser.add_argument("--cfl",
+                    default=1.,
                     type=float,
                     action="store",
-                    help="Time step size (seconds)")
+                    help="CFL number to run at (determines dt).")
 
 parser.add_argument("--tmax",
                     default=100.,
@@ -80,33 +80,22 @@ if args.help:
     PETSc.Sys.Print("%s\n" % help)
     sys.exit(1)
 
-dt = args.dt                    # Time-step size (s)
 tmax = args.tmax                # Maximum time (s)
 nlayers = args.layers           # Number of vertical layers
 refinements = args.refinements  # Number of horiz. cells = 20*(4^refinements)
-
-if args.profile:
-    tmax = 5*dt
-
-if args.test:
-    tmax = dt
 
 hybrid = bool(args.hybridization)
 PETSc.Sys.Print("""
 Problem parameters:\n
 Test case DCMIP 3-1: Non-orographic gravity waves on a small planet.\n
 Hybridized compressible solver: %s,\n
-Time-step size: %s,\n
 Horizontal refinements: %s,\n
 Vertical layers: %s,\n
 Profiling: %s,\n
 Max time: %s,\n
 Dump frequency: %s.\n
-""" % (hybrid, dt, refinements, nlayers,
+""" % (hybrid, refinements, nlayers,
        bool(args.profile), args.tmax, args.dumpfreq))
-
-PETSc.Sys.Print("Initializing problem with dt: %s and tmax: %s.\n" % (dt,
-                                                                      tmax))
 
 # Set up problem parameters
 parameters = CompressibleParameters()
@@ -132,6 +121,27 @@ L_z = 20000.0                   # Vertical wave length of the Theta' perturb.
 m = CubedSphereMesh(radius=a,
                     refinement_level=refinements,
                     degree=2)
+
+# Horizontal Courant (advective) number
+cell_vs = interpolate(CellVolume(m),
+                      FunctionSpace(m, "DG", 0))
+a_min = cell_vs.dat.data.min()
+a_max = cell_vs.dat.data.max()
+dx_min = sqrt(a_min)
+dx_max = sqrt(a_max)
+dx_avg = (dx_min + dx_max)/2.0
+u_max = u_0
+
+dt = args.cfl * (dx_avg / 343.0)
+
+if args.profile:
+    tmax = 5*dt
+
+if args.test:
+    tmax = dt
+
+PETSc.Sys.Print("Initializing problem with dt: %s and tmax: %s.\n" % (dt,
+                                                                      tmax))
 
 # Build volume mesh
 z_top = 1.0e4            # Height position of the model top
@@ -182,7 +192,7 @@ Vr = rho0.function_space()
 
 # Initial conditions with u0
 x = SpatialCoordinate(mesh)
-u_max = 20.
+# u max defined above
 uexpr = as_vector([-u_max*x[1]/a, u_max*x[0]/a, 0.0])
 u0.project(uexpr)
 
@@ -217,6 +227,22 @@ theta0.interpolate(theta_b)
 
 # Compute the balanced density
 PETSc.Sys.Print("Computing balanced density field...\n")
+# name = "balanced-nprocs-%d-dim-%d.h5" % (mesh.comm.size,
+#                                          state.function_space().dim())
+
+# try:
+#     with DumbCheckpoint(name, FILE_READ) as f:
+#         f.load()
+#         ....
+# except:
+#     compressible_hydrostatic_balance(state,
+#                                      theta_b,
+#                                      rho_b,
+#                                      top=False,
+#                                      pi_boundary=(p/p_0)**kappa)
+#     with DumbCheckpoint(name, FILE_WRITE) as f:
+#         f.save(...)
+
 compressible_hydrostatic_balance(state,
                                  theta_b,
                                  rho_b,
@@ -249,19 +275,32 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 # Set up linear solver
 if hybrid:
     PETSc.Sys.Print("""
-    Setting up hybridized solver with BCGS + GAMG on the traces.""")
-
-    mg_params = {'ksp_type': 'richardson',
-                 'ksp_max_it': 5,
-                 'pc_type': 'bjacobi',
-                 'sub_pc_type': 'ilu'}
-
+    Setting up hybridized solver on the traces.""")
+    # solver_parameters = {'ksp_type': 'gcr',
+    #                      'ksp_max_it': 30,
+    #                      'ksp_rtol': args.rtol,
+    #                      "pc_type": "mg",
+    #                      "mg_coarse": {"ksp_type": "preonly",
+    #                                    "pc_type": "lu",
+    #                                    "pc_factor_mat_solver_type": "mumps"},
+    #                      "mg_levels": {"ksp_type": "gmres",
+    #                                    "ksp_max_it": 5,
+    #                                    "pc_type": "bjacobi",
+    #                                    "sub_pc_type": "ilu"}}
     solver_parameters = {'ksp_type': 'gmres',
-                         'ksp_rtol': args.rtol,
-                         'pc_type': 'gamg',
-                         'pc_gamg_sym_graph': True,
-                         'pc_gamg_reuse_interpolation': True,
-                         'mg_levels': mg_params}
+                         "ksp_gmres_modifiedgramschmidt": True,
+                         'ksp_max_it': 100,
+                         'ksp_rtol': 1.0e-8,
+                         'pc_type': 'hypre',
+                         'pc_hypre_type': 'boomeramg',
+                         "pc_hypre_boomeramg_no_CF": True,
+                         "pc_hypre_boomeramg_coarsen_type": "HMIS",
+                         "pc_hypre_boomeramg_interp_type": "ext+i",
+                         "pc_hypre_boomeramg_smooth_type": "Euclid",
+                         "pc_hypre_boomeramg_P_max": 4,
+                         "pc_hypre_boomeramg_agg_nl": 1,
+                         "pc_hypre_boomeramg_agg_num_paths": 2}
+
     if args.debug:
         solver_parameters['ksp_monitor_true_residual'] = True
 
@@ -279,7 +318,7 @@ else:
     # Aggressive AMG procedure
     mg_params = {'ksp_type': 'chebyshev',
                  'ksp_chebyshev_esteig': True,
-                 'ksp_max_it': 2,
+                 'ksp_max_it': 5,
                  'pc_type': 'bjacobi',
                  'sub_pc_type': 'ilu'}
 
@@ -288,7 +327,7 @@ else:
                          'ksp_type': 'gmres',
                          'ksp_rtol': args.rtol,
                          'ksp_max_it': 100,
-                         'ksp_gmres_restart': 50,
+                         'ksp_gmres_restart': 30,
                          'pc_fieldsplit_schur_fact_type': 'FULL',
                          'pc_fieldsplit_schur_precondition': 'selfp',
                          'fieldsplit_0': {'ksp_type': 'preonly',
