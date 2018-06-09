@@ -253,17 +253,24 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
 if hybrid:
-    solver_parameters = {'ksp_type': 'gcr',
-                         'ksp_max_it': 30,
+    solver_parameters = {'ksp_type': 'gmres',
+                         "ksp_gmres_modifiedgramschmidt": True,
+                         'ksp_max_it': 100,
                          'ksp_rtol': 1.0e-8,
-                         "pc_type": "mg",
-                         "mg_coarse": {"ksp_type": "preonly",
-                                       "pc_type": "lu",
-                                       "pc_factor_mat_solver_type": "mumps"},
-                         "mg_levels": {"ksp_type": "gmres",
-                                       "ksp_max_it": 5,
-                                       "pc_type": "bjacobi",
-                                       "sub_pc_type": "ilu"}}
+                         'pc_type': 'hypre',
+                         'pc_hypre_type': 'boomeramg',
+                         "pc_hypre_boomeramg_no_CF": True,
+                         "pc_hypre_boomeramg_coarsen_type": "HMIS",
+                         "pc_hypre_boomeramg_interp_type": "ext+i",
+                         "pc_hypre_boomeramg_smooth_type": "Euclid",
+                         "pc_hypre_boomeramg_P_max": 4,
+                         "pc_hypre_boomeramg_agg_nl": 1,
+                         "pc_hypre_boomeramg_agg_num_paths": 2}
+    # solver_parameters = {'ksp_type': 'gmres',
+    #                      'ksp_max_it': 100,
+    #                      'ksp_rtol': 1.0e-8,
+    #                      'pc_type': 'bjacobi',
+    #                      'sub_pc_type': 'ilu'}
     if args.debug:
         solver_parameters['ksp_monitor_true_residual'] = True
 
