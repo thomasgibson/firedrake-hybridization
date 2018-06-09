@@ -132,7 +132,8 @@ dx_max = sqrt(a_max)
 dx_avg = (dx_min + dx_max)/2.0
 u_max = u_0
 
-dt = args.cfl * (dx_avg / 343.0)
+# Take integer value
+dt = int(args.cfl * (dx_avg / 343.0))
 
 if args.profile:
     tmax = 5*dt
