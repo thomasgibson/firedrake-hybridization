@@ -5,7 +5,6 @@ from firedrake import FunctionSpace, as_vector, \
     op2, parameters
 from firedrake.petsc import PETSc
 from argparse import ArgumentParser
-from hybridization import HybridizedCompressibleSolver
 import sys
 
 
@@ -21,7 +20,7 @@ def minimum(f):
 
 PETSc.Log.begin()
 parser = ArgumentParser(description=("""
-Gravity wave (nonhydrostatic) mountain test by Schar et al (2002).
+Hydrostatic gravity wave test by Skamarock and Klemp (1994).
 """), add_help=False)
 
 parser.add_argument("--hybridization",
@@ -36,23 +35,17 @@ parser.add_argument("--profile",
                     action="store_true",
                     help="Turn on profiling for a 20 time-step run.")
 
+parser.add_argument("--dt",
+                    action="store",
+                    default=5.0,
+                    type=float,
+                    help="Time step size (s)")
+
 parser.add_argument("--dumpfreq",
-                    default=18,
+                    default=5,
                     type=int,
                     action="store",
                     help="Dump frequency of output files.")
-
-parser.add_argument("--dt",
-                    default=5.,
-                    type=float,
-                    action="store",
-                    help="Time step size (seconds)")
-
-parser.add_argument("--res",
-                    default=10,
-                    type=int,
-                    action="store",
-                    help="Resolution scaling parameter.")
 
 parser.add_argument("--debug",
                     action="store_true",
@@ -62,8 +55,6 @@ parser.add_argument("--help",
                     action="store_true",
                     help="Show help.")
 
-# Good dt/res combinations: (5/10 or 5/20)
-
 args, _ = parser.parse_known_args()
 
 if args.help:
@@ -71,38 +62,36 @@ if args.help:
     PETSc.Sys.Print("%s\n" % help)
     sys.exit(1)
 
-dt = args.dt
-res = args.res
-
-if args.profile:
-    # Ensures accurate timing of parallel loops
-    parameters["pyop2_options"]["lazy_evaluation"] = False
-    tmax = 20*dt
-
-if args.test:
-    tmax = dt
-
-if not args.test and not args.profile:
-    tmax = 9000.
-
 hybrid = bool(args.hybridization)
+
+nlayers = 140         # horizontal layers
+columns = 360         # number of columns
+dt = args.dt          # Time steps (s)
+
+H = 35000.  # Height position of the model top
+L = 144000.
+
+dx = L / columns
+cfl = 10.0 * dt / dx
+dz = H / nlayers
+tmax = 9000.0
+
 PETSc.Sys.Print("""
 Problem parameters:\n
 Test case: Non-hydrostatic gravity wave over a Schar-type mountain.\n
 Hybridized compressible solver: %s,\n
 Time-step size: %s,\n
-Resolution scaling: %s,\n
+Dx (m): %s,\n
+Dz (m): %s,\n
+CFL: %s,\n
 Profiling: %s,\n
 Test run: %s,\n
 Dump frequency: %s.\n
-""" % (hybrid, dt, res, bool(args.profile), bool(args.test), args.dumpfreq))
+""" % (hybrid, dt, dx, dz, cfl, bool(args.profile),
+       bool(args.test), args.dumpfreq))
 
 PETSc.Sys.Print("Initializing problem with dt: %s and tmax: %s.\n" % (dt,
                                                                       tmax))
-H = 35000.  # Height position of the model top
-L = 144000.
-nlayers = res*7  # horizontal layers
-columns = res*18  # number of columns
 
 PETSc.Sys.Print("Creating mesh with %s columns and %s layers...\n" % (columns,
                                                                       nlayers))
@@ -138,15 +127,15 @@ fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt)
 
 if hybrid:
-    dirname = "hybrid_nh_mountain_smootherz_res%s_dt%s" % (res, dt)
+    dirname = "hybrid_nh_mountain_smootherz_dx%s_dt%s" % (dx, dt)
 else:
-    dirname = "nh_mountain_smootherz_res%s_dt%s" % (res, dt)
+    dirname = "nh_mountain_smootherz_dx%s_dt%s" % (dx, dt)
 
 output = OutputParameters(dirname=dirname,
                           dumpfreq=args.dumpfreq,
                           dumplist=['u'],
                           perturbation_fields=['theta', 'rho'])
-parameters = CompressibleParameters(g=9.80665, cp=1004.)
+cparameters = CompressibleParameters(g=9.80665, cp=1004.)
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber(), VelocityZ()]
 
@@ -155,7 +144,7 @@ state = State(mesh, vertical_degree=1, horizontal_degree=1,
               sponge_function=mu,
               timestepping=timestepping,
               output=output,
-              parameters=parameters,
+              parameters=cparameters,
               diagnostics=diagnostics,
               fieldlist=fieldlist,
               diagnostic_fields=diagnostic_fields)
@@ -172,12 +161,12 @@ Vr = rho0.function_space()
 
 # Thermodynamic constants required for setting initial conditions
 # and reference profiles
-g = parameters.g
-N = parameters.N
-p_0 = parameters.p_0
-c_p = parameters.cp
-R_d = parameters.R_d
-kappa = parameters.kappa
+g = cparameters.g
+N = cparameters.N
+p_0 = cparameters.p_0
+c_p = cparameters.cp
+R_d = cparameters.R_d
+kappa = cparameters.kappa
 
 # N^2 = (g/theta)dtheta/dz => dtheta/dz = theta N^2g => theta=theta_0exp(N^2gz)
 Tsurf = 300.
@@ -264,15 +253,17 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
 if hybrid:
-    solver_parameters = {'ksp_type': 'gmres',
+    solver_parameters = {'ksp_type': 'gcr',
+                         'ksp_max_it': 30,
                          'ksp_rtol': 1.0e-8,
-                         'pc_type': 'gamg',
-                         'pc_gamg_sym_graph': True,
-                         'mg_levels': {'ksp_type': 'chebyshev',
-                                       'ksp_chebyshev_esteig': True,
-                                       'ksp_max_it': 5,
-                                       'pc_type': 'bjacobi',
-                                       'sub_pc_type': 'ilu'}}
+                         "pc_type": "mg",
+                         "mg_coarse": {"ksp_type": "preonly",
+                                       "pc_type": "lu",
+                                       "pc_factor_mat_solver_type": "mumps"},
+                         "mg_levels": {"ksp_type": "gmres",
+                                       "ksp_max_it": 5,
+                                       "pc_type": "bjacobi",
+                                       "sub_pc_type": "ilu"}}
     if args.debug:
         solver_parameters['ksp_monitor_true_residual'] = True
 
