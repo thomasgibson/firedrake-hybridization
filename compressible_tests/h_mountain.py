@@ -4,7 +4,7 @@ from firedrake import FunctionSpace, as_vector, \
     SpatialCoordinate, exp, pi, cos, Function, conditional, Mesh, sin, op2, sqrt
 import sys
 
-dt = 5.0
+dt = 8.0
 if '--running-tests' in sys.argv:
     tmax = dt
 else:
@@ -59,7 +59,7 @@ if hybridization:
     dirname += '_hybridization'
 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=30,
+                          dumpfreq=75,
                           dumplist=['u'],
                           perturbation_fields=['theta', 'rho'])
 
@@ -179,20 +179,31 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
 if hybridization:
-    params = {'ksp_type': 'gmres',
-              "ksp_gmres_modifiedgramschmidt": True,
-              "ksp_monitor_true_residual": True,
-              'ksp_max_it': 100,
-              'ksp_rtol': 1.0e-8,
-              'pc_type': 'hypre',
-              'pc_hypre_type': 'boomeramg',
-              "pc_hypre_boomeramg_no_CF": True,
-              "pc_hypre_boomeramg_coarsen_type": "HMIS",
-              "pc_hypre_boomeramg_interp_type": "ext+i",
-              "pc_hypre_boomeramg_smooth_type": "Euclid",
-              "pc_hypre_boomeramg_P_max": 4,
-              "pc_hypre_boomeramg_agg_nl": 1,
-              "pc_hypre_boomeramg_agg_num_paths": 2}
+    # params = {'ksp_type': 'gmres',
+    #           "ksp_gmres_modifiedgramschmidt": True,
+    #           "ksp_monitor_true_residual": True,
+    #           'ksp_max_it': 100,
+    #           'ksp_rtol': 1.0e-8,
+    #           'pc_type': 'hypre',
+    #           'pc_hypre_type': 'boomeramg',
+    #           "pc_hypre_boomeramg_no_CF": True,
+    #           "pc_hypre_boomeramg_coarsen_type": "HMIS",
+    #           "pc_hypre_boomeramg_interp_type": "ext+i",
+    #           "pc_hypre_boomeramg_smooth_type": "Euclid",
+    #           "pc_hypre_boomeramg_P_max": 4,
+    #           "pc_hypre_boomeramg_agg_nl": 1,
+    #           "pc_hypre_boomeramg_agg_num_paths": 2}
+    params = {
+        'ksp_type': 'fgmres',
+        'ksp_rtol': 1.0e-8,
+        'ksp_monitor_true_residual': True,
+        'ksp_max_it': 100,
+        'pc_type': 'gamg',
+        'mg_levels': {'ksp_type': 'gmres',
+                      'ksp_max_it': 8,
+                      'pc_type': 'bjacobi',
+                      'sub_pc_type': 'ilu'}
+    }
     linear_solver = HybridizedCompressibleSolver(state, solver_parameters=params,
                                                  overwrite_solver_parameters=True)
 else:
