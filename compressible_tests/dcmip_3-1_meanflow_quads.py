@@ -277,17 +277,10 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 if hybrid:
     PETSc.Sys.Print("""
     Setting up hybridized solver on the traces.""")
-    solver_parameters = {'ksp_type': 'fgmres',
-                         'ksp_max_it': 100,
-                         'ksp_rtol': args.rtol,
-                         "pc_type": "mg",
-                         "mg_coarse": {"ksp_type": "preonly",
-                                       "pc_type": "lu",
-                                       "pc_factor_mat_solver_type": "mumps"},
-                         "mg_levels": {"ksp_type": "gmres",
-                                       "ksp_max_it": 5,
-                                       "pc_type": "bjacobi",
-                                       "sub_pc_type": "ilu"}}
+
+    # NOTE: Hypre is supposedly better for non-symmetric systems.
+    # I haven't been able to find a nice set of configurations yet.
+
     # solver_parameters = {'ksp_type': 'gmres',
     #                      "ksp_gmres_modifiedgramschmidt": True,
     #                      'ksp_max_it': 100,
@@ -301,6 +294,8 @@ if hybrid:
     #                      "pc_hypre_boomeramg_P_max": 4,
     #                      "pc_hypre_boomeramg_agg_nl": 1,
     #                      "pc_hypre_boomeramg_agg_num_paths": 2}
+
+    # Bi-CG-stab + block ILU PC
     # solver_parameters = {
     #     'ksp_type': 'bcgs',
     #     'ksp_max_it': 100,
@@ -308,6 +303,31 @@ if hybrid:
     #     'sub_pc_type': 'ilu',
     #     'ksp_rtol': args.rtol
     # }
+
+    # GMRES + block ILU PC
+    # solver_parameters = {
+    #     'ksp_type': 'gmres',
+    #     'ksp_rtol': args.rtol,
+    #     'ksp_max_it': 100,
+    #     'pc_type': 'bjacobi',
+    #     'sub_pc_type': 'ilu'
+    # }
+
+    # NOTE: GAMG is configured for symmetric systems.
+    # Using gmres on the mg levels can potentially help clean
+    # things up, but a more robust configuration still needs to
+    # be developed.
+
+    solver_parameters = {
+        'ksp_type': 'fgmres',
+        'ksp_rtol': args.rtol,
+        'ksp_max_it': 100,
+        'pc_type': 'gamg',
+        'mg_levels': {'ksp_type': 'gmres',
+                      'ksp_max_it': 8,
+                      'pc_type': 'bjacobi',
+                      'sub_pc_type': 'ilu'}
+    }
 
     if args.debug:
         solver_parameters['ksp_monitor_true_residual'] = True
@@ -322,6 +342,10 @@ if hybrid:
 else:
     PETSc.Sys.Print("""
     Setting up GMRES fieldsplit solver with Schur complement PC.""")
+
+    # WARNING: I do not trust these parameters even for the non-hybrid case.
+    # I do not believe that the approximate Schur complement is symmetric at
+    # all. For larger dt, not even the gmres + approx sc approach behaves well.
 
     # Aggressive AMG procedure
     mg_params = {'ksp_type': 'chebyshev',
