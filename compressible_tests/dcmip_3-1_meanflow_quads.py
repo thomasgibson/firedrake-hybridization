@@ -53,6 +53,12 @@ parser.add_argument("--refinements",
                     action="store",
                     help="Resolution scaling parameter.")
 
+parser.add_argument("--richardson_scale",
+                    default=1.0,
+                    type=float,
+                    action="store",
+                    help="Set the Richardson scaling parameter for the trace system.")
+
 parser.add_argument("--layers",
                     default=16,
                     type=int,
@@ -319,12 +325,12 @@ if hybrid:
     # be developed.
 
     solver_parameters = {
-        'ksp_type': 'fgmres',
+        'ksp_type': 'gmres',
         'ksp_rtol': args.rtol,
         'ksp_max_it': 100,
         'pc_type': 'gamg',
-        'mg_levels': {'ksp_type': 'gmres',
-                      'ksp_max_it': 8,
+        'mg_levels': {'ksp_type': 'richardson',
+                      'ksp_richardson_scale': args.richardson_scale,
                       'pc_type': 'bjacobi',
                       'sub_pc_type': 'ilu'}
     }
