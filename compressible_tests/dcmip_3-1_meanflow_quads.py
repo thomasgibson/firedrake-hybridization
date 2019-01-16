@@ -234,6 +234,7 @@ theta0.interpolate(theta_b)
 
 # Compute the balanced density
 PETSc.Sys.Print("Computing balanced density field...\n")
+
 # name = "balanced-nprocs-%d-dim-%d.h5" % (mesh.comm.size,
 #                                          state.function_space().dim())
 
@@ -250,11 +251,27 @@ PETSc.Sys.Print("Computing balanced density field...\n")
 #     with DumbCheckpoint(name, FILE_WRITE) as f:
 #         f.save(...)
 
+# Use vertical hybridization preconditioner for the balance initialization
+pi_params = {'ksp_type': 'preonly',
+             'pc_type': 'python',
+             'mat_type': 'matfree',
+             'pc_python_type': 'gusto.VerticalHybridizationPC',
+             'vert_hybridization': {'ksp_type': 'bcgs',
+                                    'pc_type': 'gamg',
+                                    'pc_gamg_sym_graph': True,
+                                    'ksp_rtol': 1e-8,
+                                    'ksp_atol': 1e-8,
+                                    'mg_levels': {'ksp_type': 'richardson',
+                                                  'ksp_max_it': 3,
+                                                  'pc_type': 'bjacobi',
+                                                  'sub_pc_type': 'ilu'}}}
 compressible_hydrostatic_balance(state,
                                  theta_b,
                                  rho_b,
                                  top=False,
-                                 pi_boundary=(p/p_0)**kappa)
+                                 pi_boundary=(p/p_0)**kappa,
+                                 solve_for_rho=False,
+                                 params=pi_params)
 theta0.interpolate(theta_pert)
 theta0 += theta_b
 rho0.assign(rho_b)
