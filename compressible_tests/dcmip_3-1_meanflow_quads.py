@@ -265,6 +265,9 @@ pi_params = {'ksp_type': 'preonly',
                                                   'ksp_max_it': 3,
                                                   'pc_type': 'bjacobi',
                                                   'sub_pc_type': 'ilu'}}}
+if args.debug:
+    pi_params['vert_hybridization']['ksp_monitor_true_residual'] = True
+
 compressible_hydrostatic_balance(state,
                                  theta_b,
                                  rho_b,
