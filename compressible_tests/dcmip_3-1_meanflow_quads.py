@@ -59,6 +59,10 @@ parser.add_argument("--richardson_scale",
                     action="store",
                     help="Set the Richardson scaling parameter for the trace system.")
 
+parser.add_argument("--flexsolver",
+                    action="store_true",
+                    help="Switch to flex-GMRES and AMG.")
+
 parser.add_argument("--layers",
                     default=16,
                     type=int,
@@ -344,16 +348,28 @@ if hybrid:
     # things up, but a more robust configuration still needs to
     # be developed.
 
-    solver_parameters = {
-        'ksp_type': 'gmres',
-        'ksp_rtol': args.rtol,
-        'ksp_max_it': 100,
-        'pc_type': 'gamg',
-        'mg_levels': {'ksp_type': 'richardson',
-                      'ksp_richardson_scale': args.richardson_scale,
-                      'pc_type': 'bjacobi',
-                      'sub_pc_type': 'ilu'}
-    }
+    if args.flexsolver:
+        solver_parameters = {
+            'ksp_type': 'fgmres',
+            'ksp_rtol': args.rtol,
+            'ksp_max_it': 100,
+            'pc_type': 'gamg',
+            'mg_levels': {'ksp_type': 'gmres',
+                          'ksp_max_it': 5,
+                          'pc_type': 'bjacobi',
+                          'sub_pc_type': 'ilu'}
+        }
+    else:
+        solver_parameters = {
+            'ksp_type': 'gmres',
+            'ksp_rtol': args.rtol,
+            'ksp_max_it': 100,
+            'pc_type': 'gamg',
+            'mg_levels': {'ksp_type': 'richardson',
+                          'ksp_richardson_scale': args.richardson_scale,
+                          'pc_type': 'bjacobi',
+                          'sub_pc_type': 'ilu'}
+        }
 
     if args.debug:
         solver_parameters['ksp_monitor_true_residual'] = True
