@@ -1,7 +1,8 @@
 from gusto import *
-from firedrake import CubedSphereMesh, ExtrudedMesh, Expression, \
-    VectorFunctionSpace, FunctionSpace, Function, SpatialCoordinate, \
-    as_vector, DumbCheckpoint, interpolate, CellVolume, sqrt
+from firedrake import (CubedSphereMesh, ExtrudedMesh, Expression,
+                       VectorFunctionSpace, FunctionSpace, Function,
+                       SpatialCoordinate, as_vector, interpolate,
+                       CellVolume, sqrt)
 from firedrake import exp, acos, cos, sin, parameters
 from firedrake.petsc import PETSc
 from argparse import ArgumentParser
@@ -28,6 +29,10 @@ parser.add_argument("--test",
 parser.add_argument("--profile",
                     action="store_true",
                     help="Turn on profiling.")
+
+parser.add_argument("--output",
+                    action="store_true",
+                    help="Turn on output generation.")
 
 parser.add_argument("--dumpfreq",
                     default=100,
@@ -104,8 +109,13 @@ Vertical layers: %s,\n
 Profiling: %s,\n
 Max time: %s,\n
 Dump frequency: %s.\n
-""" % (hybrid, refinements, nlayers,
-       bool(args.profile), args.tmax, args.dumpfreq))
+Generating output: %s\n
+""" % (hybrid, refinements,
+       nlayers,
+       bool(args.profile),
+       args.tmax,
+       args.dumpfreq,
+       args.output))
 
 # Set up problem parameters
 parameters = CompressibleParameters()
@@ -180,7 +190,10 @@ if hybrid:
     dirname += '_hybridization'
 
 output = OutputParameters(dumpfreq=args.dumpfreq, dirname=dirname,
-                          perturbation_fields=['theta', 'rho'])
+                          perturbation_fields=['theta', 'rho'],
+                          dump_vtus=args.output,
+                          dump_diagnostics=args.output)
+
 diagnostics = Diagnostics(*fieldlist)
 
 state = State(mesh, vertical_degree=1, horizontal_degree=1,
@@ -238,22 +251,6 @@ theta0.interpolate(theta_b)
 
 # Compute the balanced density
 PETSc.Sys.Print("Computing balanced density field...\n")
-
-# name = "balanced-nprocs-%d-dim-%d.h5" % (mesh.comm.size,
-#                                          state.function_space().dim())
-
-# try:
-#     with DumbCheckpoint(name, FILE_READ) as f:
-#         f.load()
-#         ....
-# except:
-#     compressible_hydrostatic_balance(state,
-#                                      theta_b,
-#                                      rho_b,
-#                                      top=False,
-#                                      pi_boundary=(p/p_0)**kappa)
-#     with DumbCheckpoint(name, FILE_WRITE) as f:
-#         f.save(...)
 
 # Use vertical hybridization preconditioner for the balance initialization
 pi_params = {'ksp_type': 'preonly',
