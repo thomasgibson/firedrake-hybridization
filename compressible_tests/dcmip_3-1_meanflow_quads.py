@@ -192,7 +192,8 @@ if hybrid:
 output = OutputParameters(dumpfreq=args.dumpfreq, dirname=dirname,
                           perturbation_fields=['theta', 'rho'],
                           dump_vtus=args.output,
-                          dump_diagnostics=args.output)
+                          dump_diagnostics=args.output,
+                          checkpoint=args.output)
 
 diagnostics = Diagnostics(*fieldlist)
 
