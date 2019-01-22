@@ -309,22 +309,22 @@ if hybrid:
     # NOTE: Hypre is supposedly better for non-symmetric systems.
     # I haven't been able to find a nice set of configurations yet.
 
-    # solver_parameters = {'ksp_type': 'gmres',
-    #                      "ksp_gmres_modifiedgramschmidt": True,
-    #                      'ksp_max_it': 100,
-    #                      'ksp_rtol': 1.0e-8,
-    #                      'pc_type': 'hypre',
-    #                      'pc_hypre_type': 'boomeramg',
-    #                      "pc_hypre_boomeramg_no_CF": True,
-    #                      "pc_hypre_boomeramg_coarsen_type": "HMIS",
-    #                      "pc_hypre_boomeramg_interp_type": "ext+i",
-    #                      "pc_hypre_boomeramg_smooth_type": "Euclid",
-    #                      "pc_hypre_boomeramg_P_max": 4,
-    #                      "pc_hypre_boomeramg_agg_nl": 1,
-    #                      "pc_hypre_boomeramg_agg_num_paths": 2}
+    # inner_parameters = {'ksp_type': 'gmres',
+    #                     "ksp_gmres_modifiedgramschmidt": True,
+    #                     'ksp_max_it': 100,
+    #                     'ksp_rtol': 1.0e-8,
+    #                     'pc_type': 'hypre',
+    #                     'pc_hypre_type': 'boomeramg',
+    #                     "pc_hypre_boomeramg_no_CF": True,
+    #                     "pc_hypre_boomeramg_coarsen_type": "HMIS",
+    #                     "pc_hypre_boomeramg_interp_type": "ext+i",
+    #                     "pc_hypre_boomeramg_smooth_type": "Euclid",
+    #                     "pc_hypre_boomeramg_P_max": 4,
+    #                     "pc_hypre_boomeramg_agg_nl": 1,
+    #                     "pc_hypre_boomeramg_agg_num_paths": 2}
 
     # Bi-CG-stab + block ILU PC
-    # solver_parameters = {
+    # inner_parameters = {
     #     'ksp_type': 'bcgs',
     #     'ksp_max_it': 100,
     #     'pc_type': 'bjacobi',
@@ -333,7 +333,7 @@ if hybrid:
     # }
 
     # GMRES + block ILU PC
-    # solver_parameters = {
+    # inner_parameters = {
     #     'ksp_type': 'gmres',
     #     'ksp_rtol': args.rtol,
     #     'ksp_max_it': 100,
@@ -347,18 +347,20 @@ if hybrid:
     # be developed.
 
     if args.flexsolver:
-        solver_parameters = {
-            'ksp_type': 'fgmres',
-            'ksp_rtol': args.rtol,
-            'ksp_max_it': 100,
-            'pc_type': 'gamg',
-            'mg_levels': {'ksp_type': 'gmres',
-                          'ksp_max_it': 5,
-                          'pc_type': 'bjacobi',
-                          'sub_pc_type': 'ilu'}
-        }
+         inner_parameters = {
+             'ksp_type': 'fgmres',
+             'ksp_rtol': 1.0e-8,
+             'ksp_atol': 1.0e-8,
+             'ksp_max_it': 100,
+             'pc_type': 'gamg',
+             'pc_gamg_sym_graph': True,
+             'mg_levels': {'ksp_type': 'gmres',
+                           'ksp_max_its': 5,
+                           'pc_type': 'bjacobi',
+                           'sub_pc_type': 'ilu'}
+         }
     else:
-        solver_parameters = {
+        inner_parameters = {
             'ksp_type': 'gmres',
             'ksp_rtol': args.rtol,
             'ksp_max_it': 100,
@@ -370,7 +372,18 @@ if hybrid:
         }
 
     if args.debug:
-        solver_parameters['ksp_monitor_true_residual'] = True
+        inner_parameters['ksp_monitor_true_residual'] = True
+
+    # Use Firedrake static condensation interface
+    solver_parameters = {
+        'mat_type': 'matfree',
+        'pmat_type': 'matfree',
+        'ksp_type': 'preonly',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.SCPC',
+        'pc_sc_eliminate_fields': '0, 1',
+        'condensed_field': inner_parameters
+    }
 
     PETSc.Sys.Print("""
     Full solver options:\n
