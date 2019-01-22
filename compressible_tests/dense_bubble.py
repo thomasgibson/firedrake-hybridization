@@ -204,39 +204,57 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 # Set up linear solver
 if hybrid:
     if args.debug:
-        solver_parameters = {'ksp_type': 'gmres',
-                             'pc_type': 'gamg',
-                             'ksp_rtol': 1.0e-8,
-                             'ksp_monitor_true_residual': True,
-                             'mg_levels': {'ksp_type': 'chebyshev',
-                                           'ksp_chebyshev_esteig': True,
-                                           'ksp_max_it': 2,
-                                           'pc_type': 'bjacobi',
-                                           'sub_pc_type': 'ilu'}}
-        linear_solver = HybridizedCompressibleSolver(state, solver_parameters=solver_parameters,
+        inner_parameters = {
+             'ksp_type': 'fgmres',
+             'ksp_rtol': 1.0e-8,
+             'ksp_atol': 1.0e-8,
+             'ksp_max_it': 100,
+             'pc_type': 'gamg',
+             'pc_gamg_sym_graph': True,
+             'mg_levels': {'ksp_type': 'gmres',
+                           'ksp_max_its': 5,
+                           'pc_type': 'bjacobi',
+                           'sub_pc_type': 'ilu'}
+         }
+        inner_parameters['ksp_monitor_true_residual'] = True
+
+        # Use Firedrake static condensation interface
+        solver_parameters = {
+            'mat_type': 'matfree',
+            'pmat_type': 'matfree',
+            'ksp_type': 'preonly',
+            'pc_type': 'python',
+            'pc_python_type': 'firedrake.SCPC',
+            'pc_sc_eliminate_fields': '0, 1',
+            'condensed_field': inner_parameters
+        }
+        linear_solver = HybridizedCompressibleSolver(state,
+                                                     solver_parameters=solver_parameters,
                                                      overwrite_solver_parameters=True)
     else:
         linear_solver = HybridizedCompressibleSolver(state)
 else:
     if args.debug:
-        solver_parameters = {'pc_type': 'fieldsplit',
-                             'pc_fieldsplit_type': 'schur',
-                             'ksp_type': 'gmres',
-                             'ksp_monitor_true_residual': True,
-                             'ksp_max_it': 100,
-                             'ksp_gmres_restart': 50,
-                             'pc_fieldsplit_schur_fact_type': 'FULL',
-                             'pc_fieldsplit_schur_precondition': 'selfp',
-                             'fieldsplit_0': {'ksp_type': 'preonly',
-                                              'pc_type': 'bjacobi',
-                                              'sub_pc_type': 'ilu'},
-                             'fieldsplit_1': {'ksp_type': 'preonly',
-                                              'pc_type': 'gamg',
-                                              'mg_levels': {'ksp_type': 'chebyshev',
-                                                            'ksp_chebyshev_esteig': True,
-                                                            'ksp_max_it': 1,
-                                                            'pc_type': 'bjacobi',
-                                                            'sub_pc_type': 'ilu'}}}
+        solver_parameters = {
+            'pc_type': 'fieldsplit',
+            'pc_fieldsplit_type': 'schur',
+            'ksp_type': 'gmres',
+            'ksp_monitor_true_residual': True,
+            'ksp_max_it': 100,
+            'ksp_gmres_restart': 50,
+            'pc_fieldsplit_schur_fact_type': 'FULL',
+            'pc_fieldsplit_schur_precondition': 'selfp',
+            'fieldsplit_0': {'ksp_type': 'preonly',
+                             'pc_type': 'bjacobi',
+                             'sub_pc_type': 'ilu'},
+            'fieldsplit_1': {'ksp_type': 'preonly',
+                             'pc_type': 'gamg',
+                             'mg_levels': {'ksp_type': 'chebyshev',
+                                           'ksp_chebyshev_esteig': True,
+                                           'ksp_max_it': 1,
+                                           'pc_type': 'bjacobi',
+                                           'sub_pc_type': 'ilu'}}
+        }
         linear_solver = CompressibleSolver(state, solver_parameters=solver_parameters,
                                            overwrite_solver_parameters=True)
     else:
