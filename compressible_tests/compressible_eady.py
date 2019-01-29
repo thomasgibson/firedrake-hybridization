@@ -2,19 +2,21 @@
 Credit for demo setup: Gusto development team
 """
 from gusto import *
-from firedrake import as_vector, SpatialCoordinate,\
-    PeriodicRectangleMesh, ExtrudedMesh, \
-    exp, cos, sin, cosh, sinh, tanh, pi, Function, sqrt, \
-    parameters
+from firedrake import (as_vector, SpatialCoordinate,
+                       PeriodicRectangleMesh, ExtrudedMesh,
+                       exp, cos, sin, cosh, sinh, tanh, pi,
+                       Function, sqrt)
 from firedrake.petsc import PETSc
 from argparse import ArgumentParser
-from hybridization import HybridizedCompressibleSolver
 import sys
+
 
 day = 24.*60.*60.
 hour = 60.*60.
 
+
 PETSc.Log.begin()
+
 parser = ArgumentParser(description="""Euler-Boussinesq Eady slice model.""",
                         add_help=False)
 
@@ -50,6 +52,7 @@ parser.add_argument("--help",
                     action="store_true",
                     help="Show help.")
 
+
 args, _ = parser.parse_known_args()
 
 if args.help:
@@ -61,8 +64,6 @@ dt = args.dt
 res = args.res
 
 if args.profile:
-    # Ensures accurate timing of parallel loops
-    parameters["pyop2_options"]["lazy_evaluation"] = False
     tmax = 20*dt
 
 if args.test:
@@ -70,6 +71,7 @@ if args.test:
 
 if not args.test and not args.profile:
     tmax = 30*day
+
 
 hybrid = bool(args.hybridization)
 PETSc.Sys.Print("""
@@ -82,6 +84,7 @@ Test run: %s.\n
 
 PETSc.Sys.Print("Initializing problem with dt: %s and tmax: %s.\n" % (dt,
                                                                       tmax))
+
 
 # Construct 1d periodic base mesh
 columns = 2*res  # number of columns
@@ -135,8 +138,10 @@ parameters = CompressibleEadyParameters(H=H, f=f)
 diagnostics = Diagnostics(*fieldlist)
 
 # List of diagnostic fields, each defined in a class in diagnostics.py
-diagnostic_fields = [CourantNumber(), VelocityY(),
-                     ExnerPi(), ExnerPi(reference=True),
+diagnostic_fields = [CourantNumber(),
+                     VelocityY(),
+                     ExnerPi(),
+                     ExnerPi(reference=True),
                      CompressibleKineticEnergy(),
                      CompressibleKineticEnergyY(),
                      CompressibleEadyPotentialEnergy(),
@@ -147,7 +152,9 @@ diagnostic_fields = [CourantNumber(), VelocityY(),
 
 # Setup state, passing in the mesh, information on the required finite element
 # function spaces and the classes above
-state = State(mesh, vertical_degree=1, horizontal_degree=1,
+state = State(mesh,
+              vertical_degree=1,
+              horizontal_degree=1,
               family="RTCF",
               Coriolis=Omega,
               timestepping=timestepping,
@@ -205,38 +212,39 @@ theta0.interpolate(theta_b + theta_pert)
 
 # Calculate hydrostatic Pi
 PETSc.Sys.Print("Computing hydrostatic varaibles...\n")
-params = {'pc_type': 'fieldsplit',
-          'pc_fieldsplit_type': 'schur',
-          'ksp_type': 'gmres',
-          'ksp_monitor_true_residual': True,
-          'ksp_rtol': 1.0e-8,
-          'ksp_max_it': 1000,
-          'ksp_gmres_restart': 50,
-          'pc_fieldsplit_schur_fact_type': 'FULL',
-          'pc_fieldsplit_schur_precondition': 'selfp',
-          'fieldsplit_0': {'ksp_type': 'cg',
-                           'ksp_rtol': 1.0e-8,
-                           'pc_type': 'bjacobi',
-                           'sub_pc_type': 'ilu'},
-          'fieldsplit_1': {'ksp_type': 'cg',
-                           'ksp_rtol': 1.0e-8,
-                           'pc_type': 'gamg',
-                           'pc_gamg_sym_graph': True,
-                           'mg_levels': {'ksp_type': 'chebyshev',
-                                         'ksp_chebyshev_esteig': True,
-                                         'ksp_max_it': 5,
-                                         'pc_type': 'bjacobi',
-                                         'sub_pc_type': 'ilu'}}}
+
+# Use vertical hybridization preconditioner for the balance initialization
+pi_params = {
+    'ksp_type': 'preonly',
+    'pc_type': 'python',
+    'mat_type': 'matfree',
+    'pc_python_type': 'gusto.VerticalHybridizationPC',
+    'vert_hybridization': {
+        'ksp_type': 'gmres',
+        'pc_type': 'gamg',
+        'pc_gamg_sym_graph': True,
+        'ksp_rtol': 1e-12,
+        'ksp_atol': 1e-12,
+        'mg_levels': {
+            'ksp_type': 'richardson',
+            'ksp_max_it': 3,
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu'
+        }
+    }
+}
+if args.debug:
+    pi_params['vert_hybridization']['ksp_monitor_true_residual'] = True
 
 rho_b = Function(Vr)
 compressible_hydrostatic_balance(state,
                                  theta_b,
                                  rho_b,
-                                 params=params)
+                                 params=pi_params)
 compressible_hydrostatic_balance(state,
                                  theta0,
                                  rho0,
-                                 params=params)
+                                 params=pi_params)
 
 # Set Pi0
 Pi0 = calculate_Pi0(state, theta0, rho0)
@@ -285,10 +293,12 @@ if hybrid:
         'ksp_max_it': 100,
         'pc_type': 'gamg',
         'pc_gamg_sym_graph': True,
-        'mg_levels': {'ksp_type': 'gmres',
-                      'ksp_max_its': 5,
-                      'pc_type': 'bjacobi',
-                      'sub_pc_type': 'ilu'}
+        'mg_levels': {
+            'ksp_type': 'gmres',
+            'ksp_max_its': 5,
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu'
+        }
     }
     if args.debug:
         inner_parameters['ksp_monitor_true_residual'] = True
@@ -308,28 +318,37 @@ if hybrid:
                                                  overwrite_solver_parameters=True)
 
 else:
-    linear_solver_params = {'pc_type': 'fieldsplit',
-                            'pc_fieldsplit_type': 'schur',
-                            'ksp_type': 'gmres',
-                            'ksp_max_it': 100,
-                            'ksp_gmres_restart': 50,
-                            'pc_fieldsplit_schur_fact_type': 'FULL',
-                            'pc_fieldsplit_schur_precondition': 'selfp',
-                            'fieldsplit_0': {'ksp_type': 'preonly',
-                                             'pc_type': 'bjacobi',
-                                             'sub_pc_type': 'ilu'},
-                            'fieldsplit_1': {'ksp_type': 'preonly',
-                                             'pc_type': 'gamg',
-                                             'pc_gamg_sym_graph': True,
-                                             'mg_levels': {'ksp_type': 'chebyshev',
-                                                           'ksp_chebyshev_esteig': True,
-                                                           'ksp_max_it': 5,
-                                                           'pc_type': 'bjacobi',
-                                                           'sub_pc_type': 'ilu'}}}
+    linear_solver_params = {
+        'pc_type': 'fieldsplit',
+        'pc_fieldsplit_type': 'schur',
+        'ksp_type': 'gmres',
+        'ksp_max_it': 100,
+        'ksp_gmres_restart': 50,
+        'pc_fieldsplit_schur_fact_type': 'FULL',
+        'pc_fieldsplit_schur_precondition': 'selfp',
+        'fieldsplit_0': {
+            'ksp_type': 'preonly',
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu'
+        },
+        'fieldsplit_1': {
+            'ksp_type': 'preonly',
+            'pc_type': 'gamg',
+            'pc_gamg_sym_graph': True,
+            'mg_levels': {
+                'ksp_type': 'chebyshev',
+                'ksp_chebyshev_esteig': True,
+                'ksp_max_it': 5,
+                'pc_type': 'bjacobi',
+                'sub_pc_type': 'ilu'
+            }
+        }
+    }
     if args.debug:
         linear_solver_params['ksp_monitor_true_residual'] = True
 
-    linear_solver = CompressibleSolver(state, solver_parameters=linear_solver_params,
+    linear_solver = CompressibleSolver(state,
+                                       solver_parameters=linear_solver_params,
                                        overwrite_solver_parameters=True)
 
 # Set up forcing
