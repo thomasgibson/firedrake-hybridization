@@ -11,6 +11,16 @@ from argparse import ArgumentParser
 import sys
 
 
+def minimum(f):
+    fmin = op2.Global(1, [1000], dtype=float)
+    op2.par_loop(op2.Kernel("""
+        void minify(double *a, double *b) {
+        a[0] = a[0] > fabs(b[0]) ? fabs(b[0]) : a[0];
+        }
+        """, "minify"), f.dof_dset.set, fmin(op2.MIN), f.dat(op2.READ))
+    return fmin.data[0]
+
+
 PETSc.Log.begin()
 
 parser = ArgumentParser(description="""Flow over an isolated mountain (hydrostatic).""",
@@ -35,10 +45,16 @@ parser.add_argument("--dt",
                     help="Time step size (seconds)")
 
 parser.add_argument("--res",
-                    default=10,
+                    default=1,
                     type=int,
                     action="store",
                     help="Resolution scaling parameter.")
+
+parser.add_argument("--dumpfreq",
+                    default=30,
+                    type=int,
+                    action="store",
+                    help="Dump frequency of output files.")
 
 parser.add_argument("--debug",
                     action="store_true",
@@ -69,13 +85,37 @@ else:
     hybridization = False
 
 res = args.res
-nlayers = res*20  # horizontal layers
-columns = res*12  # number of columns
+nlayers = res*200  # horizontal layers
+columns = res*120  # number of columns
+H = 50000.         # Height position of the model top
 L = 240000.
-m = PeriodicIntervalMesh(columns, L)
 
+deltax = L / columns
+deltaz = H / nlayers
+
+PETSc.Sys.Print("""
+Problem parameters:\n
+Test case: Hydrostatic gravity wave over an isolated mountain.\n
+Hybridized compressible solver: %s,\n
+Time-step size: %s,\n
+Dx (m): %s,\n
+Dz (m): %s,\n
+Profiling: %s,\n
+Test run: %s,\n
+Dump frequency: %s.\n
+""" % (hybridization,
+       dt, deltax, deltaz,
+       bool(args.profile),
+       bool(args.test),
+       args.dumpfreq*res))
+
+PETSc.Sys.Print("Initializing problem with dt: %s and tmax: %s.\n" % (dt,
+                                                                      tmax))
+
+PETSc.Sys.Print("Creating mesh with %s columns and %s layers...\n" % (columns,
+                                                                      nlayers))
 # build volume mesh
-H = 50000.  # Height position of the model top
+m = PeriodicIntervalMesh(columns, L)
 ext_mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 Vc = VectorFunctionSpace(ext_mesh, "DG", 2)
 coord = SpatialCoordinate(ext_mesh)
@@ -112,7 +152,7 @@ if hybridization:
     dirname += '_hybridization'
 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=75,
+                          dumpfreq=args.dumpfreq*res,
                           dumplist=['u'],
                           perturbation_fields=['theta', 'rho'])
 
@@ -197,17 +237,6 @@ compressible_hydrostatic_balance(state,
                                  pi_boundary=0.5,
                                  params=piparams)
 
-
-def minimum(f):
-    fmin = op2.Global(1, [1000], dtype=float)
-    op2.par_loop(op2.Kernel("""
-        void minify(double *a, double *b) {
-        a[0] = a[0] > fabs(b[0]) ? fabs(b[0]) : a[0];
-        }
-        """, "minify"), f.dof_dset.set, fmin(op2.MIN), f.dat(op2.READ))
-    return fmin.data[0]
-
-
 p0 = Constant(minimum(Pi))
 compressible_hydrostatic_balance(state,
                                  theta_b,
@@ -215,6 +244,7 @@ compressible_hydrostatic_balance(state,
                                  Pi,
                                  top=True,
                                  params=piparams)
+
 p1 = Constant(minimum(Pi))
 alpha = Constant(2.*(p1-p0))
 beta = p1-alpha
@@ -243,11 +273,15 @@ state.set_reference_profiles([('rho', rho_b),
 # Set up advection schemes
 ueqn = EulerPoincare(state, Vu)
 rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
+
 supg = True
 if supg:
-    thetaeqn = SUPGAdvection(state, Vt, supg_params={"dg_direction": "horizontal"}, equation_form="advective")
+    thetaeqn = SUPGAdvection(state, Vt,
+                             supg_params={"dg_direction": "horizontal"},
+                             equation_form="advective")
 else:
     thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
+
 advected_fields = []
 advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
 advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
@@ -285,19 +319,26 @@ if hybridization:
                                                  solver_parameters=solver_parameters,
                                                  overwrite_solver_parameters=True)
 else:
+    PETSc.Sys.Print("""
+Warning: without hybridization, iterative methods have difficulty converging.\n
+Using LU, which may take quite some time to run the simulation.
+""")
     # LU parameters
-    params = {'pc_type': 'lu',
-              'ksp_type': 'preonly',
-              'pc_factor_mat_solver_type': 'mumps',
-              'mat_type': 'aij'}
-    linear_solver = CompressibleSolver(state, solver_parameters=params,
+    solver_parameters = {'pc_type': 'lu',
+                         'ksp_type': 'preonly',
+                         'pc_factor_mat_solver_type': 'mumps',
+                         'mat_type': 'aij'}
+    linear_solver = CompressibleSolver(state,
+                                       solver_parameters=solver_parameters,
                                        overwrite_solver_parameters=True)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
 
 # build time stepper
-stepper = CrankNicolson(state, advected_fields, linear_solver,
+stepper = CrankNicolson(state,
+                        advected_fields,
+                        linear_solver,
                         compressible_forcing)
 
 PETSc.Sys.Print("Starting simulation...\n")
