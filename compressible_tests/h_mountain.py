@@ -1,21 +1,74 @@
 from gusto import *
-from firedrake import FunctionSpace, as_vector, \
-    VectorFunctionSpace, PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, exp, pi, cos, Function, conditional, Mesh, sin, op2, sqrt
+from firedrake import (FunctionSpace, as_vector,
+                       VectorFunctionSpace,
+                       PeriodicIntervalMesh,
+                       ExtrudedMesh, Constant,
+                       SpatialCoordinate, exp, pi, cos,
+                       Function, conditional, Mesh, sin,
+                       op2, sqrt)
+from firedrake.petsc import PETSc
+from argparse import ArgumentParser
 import sys
 
-dt = 8.0
-if '--running-tests' in sys.argv:
+
+PETSc.Log.begin()
+
+parser = ArgumentParser(description="""Flow over an isolated mountain (hydrostatic).""",
+                        add_help=False)
+
+parser.add_argument("--hybridization",
+                    action="store_true",
+                    help="Use a hybridized compressible solver.")
+
+parser.add_argument("--test",
+                    action="store_true",
+                    help="Enable a quick test run.")
+
+parser.add_argument("--profile",
+                    action="store_true",
+                    help="Turn on profiling for a 20 time-step run.")
+
+parser.add_argument("--dt",
+                    default=5.,
+                    type=float,
+                    action="store",
+                    help="Time step size (seconds)")
+
+parser.add_argument("--res",
+                    default=10,
+                    type=int,
+                    action="store",
+                    help="Resolution scaling parameter.")
+
+parser.add_argument("--debug",
+                    action="store_true",
+                    help="Turn on KSP monitors")
+
+parser.add_argument("--help",
+                    action="store_true",
+                    help="Show help.")
+
+
+args, _ = parser.parse_known_args()
+
+if args.help:
+    help = parser.format_help()
+    PETSc.Sys.Print("%s\n" % help)
+    sys.exit(1)
+
+dt = args.dt
+
+if args.test:
     tmax = dt
 else:
     tmax = 15000.
 
-if '--hybridization' in sys.argv:
+if args.hybridization:
     hybridization = True
 else:
     hybridization = False
 
-res = 10
+res = args.res
 nlayers = res*20  # horizontal layers
 columns = res*12  # number of columns
 L = 240000.
@@ -53,7 +106,7 @@ mubar = 0.3/dt
 mu_top = conditional(z <= zc, 0.0, mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
 mu = Function(W_DG).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=dt, alpha=0.51)
+timestepping = TimesteppingParameters(dt=dt, alpha=0.5)
 
 if hybridization:
     dirname += '_hybridization'
@@ -65,9 +118,13 @@ output = OutputParameters(dirname=dirname,
 
 parameters = CompressibleParameters(g=9.80665, cp=1004.)
 diagnostics = Diagnostics(*fieldlist)
-diagnostic_fields = [CourantNumber(), VelocityZ(), HydrostaticImbalance()]
+diagnostic_fields = [CourantNumber(),
+                     VelocityZ(),
+                     HydrostaticImbalance()]
 
-state = State(mesh, vertical_degree=1, horizontal_degree=1,
+state = State(mesh,
+              vertical_degree=1,
+              horizontal_degree=1,
               family="CG",
               sponge_function=mu,
               hydrostatic=True,
@@ -105,29 +162,39 @@ thetab = Tsurf*exp(N**2*z/g)
 theta_b = Function(Vt).interpolate(thetab)
 
 # Calculate hydrostatic Pi
-piparams = {'pc_type': 'fieldsplit',
-            'pc_fieldsplit_type': 'schur',
-            'ksp_type': 'gmres',
-            'ksp_monitor_true_residual': True,
-            'ksp_max_it': 1000,
-            'ksp_gmres_restart': 50,
-            'pc_fieldsplit_schur_fact_type': 'FULL',
-            'pc_fieldsplit_schur_precondition': 'selfp',
-            'fieldsplit_0': {'ksp_type': 'preonly',
-                             'pc_type': 'bjacobi',
-                             'sub_pc_type': 'ilu'},
-            'fieldsplit_1': {'ksp_type': 'preonly',
-                             'pc_type': 'gamg',
-                             'pc_gamg_sym_graph': True,
-                             'mg_levels': {'ksp_type': 'chebyshev',
-                                           'ksp_chebyshev_esteig': True,
-                                           'ksp_max_it': 5,
-                                           'pc_type': 'bjacobi',
-                                           'sub_pc_type': 'ilu'}}}
+PETSc.Sys.Print("Computing hydrostatic varaibles...\n")
+
+# Use vertical hybridization preconditioner for the balance initialization
+piparams = {
+    'ksp_type': 'preonly',
+    'pc_type': 'python',
+    'mat_type': 'matfree',
+    'pc_python_type': 'gusto.VerticalHybridizationPC',
+    'vert_hybridization': {
+        'ksp_type': 'gmres',
+        'pc_type': 'gamg',
+        'pc_gamg_sym_graph': True,
+        'ksp_rtol': 1e-12,
+        'ksp_atol': 1e-12,
+        'mg_levels': {
+            'ksp_type': 'richardson',
+            'ksp_max_it': 5,
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu'
+        }
+    }
+}
+if args.debug:
+    piparams['vert_hybridization']['ksp_monitor_true_residual'] = True
+
 Pi = Function(Vr)
 rho_b = Function(Vr)
-compressible_hydrostatic_balance(state, theta_b, rho_b, Pi,
-                                 top=True, pi_boundary=0.5,
+compressible_hydrostatic_balance(state,
+                                 theta_b,
+                                 rho_b,
+                                 Pi,
+                                 top=True,
+                                 pi_boundary=0.5,
                                  params=piparams)
 
 
@@ -141,22 +208,31 @@ def minimum(f):
     return fmin.data[0]
 
 
-p0 = minimum(Pi)
-compressible_hydrostatic_balance(state, theta_b, rho_b, Pi,
+p0 = Constant(minimum(Pi))
+compressible_hydrostatic_balance(state,
+                                 theta_b,
+                                 rho_b,
+                                 Pi,
                                  top=True,
                                  params=piparams)
-p1 = minimum(Pi)
-alpha = 2.*(p1-p0)
+p1 = Constant(minimum(Pi))
+alpha = Constant(2.*(p1-p0))
 beta = p1-alpha
 pi_top = (1.-beta)/alpha
-compressible_hydrostatic_balance(state, theta_b, rho_b, Pi,
-                                 top=True, pi_boundary=pi_top, solve_for_rho=True,
+compressible_hydrostatic_balance(state,
+                                 theta_b,
+                                 rho_b,
+                                 Pi,
+                                 top=True,
+                                 pi_boundary=pi_top,
+                                 solve_for_rho=True,
                                  params=piparams)
 
 theta0.assign(theta_b)
 rho0.assign(rho_b)
 u0.project(as_vector([20.0, 0.0]))
 remove_initial_w(u0, state.Vv)
+PETSc.Sys.Print("Finished computing hydrostatic varaibles...\n")
 
 state.initialise([('u', u0),
                   ('rho', rho0),
@@ -186,21 +262,23 @@ if hybridization:
         'ksp_max_it': 100,
         'pc_type': 'gamg',
         'pc_gamg_sym_graph': True,
-        'mg_levels': {'ksp_type': 'gmres',
-                      'ksp_max_its': 5,
-                      'pc_type': 'bjacobi',
-                      'sub_pc_type': 'ilu'}
+        'mg_levels': {
+            'ksp_type': 'gmres',
+            'ksp_max_it': 5,
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu'
+        }
     }
-    inner_parameters['ksp_monitor_true_residual'] = True
+    if args.debug:
+        inner_parameters['ksp_monitor_true_residual'] = True
 
-    # Use Firedrake static condensation interface
+    # Use Firedrake's static condensation interface
     solver_parameters = {
         'mat_type': 'matfree',
-        'pmat_type': 'matfree',
         'ksp_type': 'preonly',
         'pc_type': 'python',
         'pc_python_type': 'firedrake.SCPC',
-        'pc_sc_eliminate_fields': '0, 1',
+        'pc_sc_eliminate_fields': '1, 0',
         'condensed_field': inner_parameters
     }
     linear_solver = HybridizedCompressibleSolver(state,
@@ -222,4 +300,5 @@ compressible_forcing = CompressibleForcing(state)
 stepper = CrankNicolson(state, advected_fields, linear_solver,
                         compressible_forcing)
 
+PETSc.Sys.Print("Starting simulation...\n")
 stepper.run(t=0, tmax=tmax)
