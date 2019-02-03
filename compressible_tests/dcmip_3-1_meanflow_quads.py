@@ -3,17 +3,15 @@ from firedrake import (CubedSphereMesh, ExtrudedMesh, Expression,
                        VectorFunctionSpace, FunctionSpace, Function,
                        SpatialCoordinate, as_vector, interpolate,
                        CellVolume, sqrt)
-from firedrake import exp, acos, cos, sin, parameters
+from firedrake import exp, acos, cos, sin
 from firedrake.petsc import PETSc
 from argparse import ArgumentParser
 import numpy as np
 import sys
 
 
-parameters["pyop2_options"]["lazy_evaluation"] = False
-
-
 PETSc.Log.begin()
+
 parser = ArgumentParser(description=("""
 DCMIP Test 3-1 Non-orographic gravity waves on a small planet.
 """), add_help=False)
@@ -254,19 +252,25 @@ theta0.interpolate(theta_b)
 PETSc.Sys.Print("Computing balanced density field...\n")
 
 # Use vertical hybridization preconditioner for the balance initialization
-pi_params = {'ksp_type': 'preonly',
-             'pc_type': 'python',
-             'mat_type': 'matfree',
-             'pc_python_type': 'gusto.VerticalHybridizationPC',
-             'vert_hybridization': {'ksp_type': 'bcgs',
-                                    'pc_type': 'gamg',
-                                    'pc_gamg_sym_graph': True,
-                                    'ksp_rtol': 1e-8,
-                                    'ksp_atol': 1e-8,
-                                    'mg_levels': {'ksp_type': 'richardson',
-                                                  'ksp_max_it': 3,
-                                                  'pc_type': 'bjacobi',
-                                                  'sub_pc_type': 'ilu'}}}
+pi_params = {
+    'ksp_type': 'preonly',
+    'pc_type': 'python',
+    'mat_type': 'matfree',
+    'pc_python_type': 'gusto.VerticalHybridizationPC',
+    'vert_hybridization': {
+        'ksp_type': 'gmres',
+        'pc_type': 'gamg',
+        'pc_gamg_sym_graph': True,
+        'ksp_rtol': 1e-12,
+        'ksp_atol': 1e-12,
+        'mg_levels': {
+            'ksp_type': 'richardson',
+            'ksp_max_it': 3,
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu'
+        }
+    }
+}
 if args.debug:
     pi_params['vert_hybridization']['ksp_monitor_true_residual'] = True
 
@@ -277,6 +281,7 @@ compressible_hydrostatic_balance(state,
                                  pi_boundary=(p/p_0)**kappa,
                                  solve_for_rho=False,
                                  params=pi_params)
+
 theta0.interpolate(theta_pert)
 theta0 += theta_b
 rho0.assign(rho_b)
@@ -305,9 +310,6 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 if hybrid:
     PETSc.Sys.Print("""
     Setting up hybridized solver on the traces.""")
-
-    # NOTE: Hypre is supposedly better for non-symmetric systems.
-    # I haven't been able to find a nice set of configurations yet.
 
     # inner_parameters = {'ksp_type': 'gmres',
     #                     "ksp_gmres_modifiedgramschmidt": True,
@@ -341,23 +343,20 @@ if hybrid:
     #     'sub_pc_type': 'ilu'
     # }
 
-    # NOTE: GAMG is configured for symmetric systems.
-    # Using gmres on the mg levels can potentially help clean
-    # things up, but a more robust configuration still needs to
-    # be developed.
-
     if args.flexsolver:
-         inner_parameters = {
-             'ksp_type': 'fgmres',
-             'ksp_rtol': 1.0e-8,
-             'ksp_atol': 1.0e-8,
-             'ksp_max_it': 100,
-             'pc_type': 'gamg',
-             'pc_gamg_sym_graph': True,
-             'mg_levels': {'ksp_type': 'gmres',
-                           'ksp_max_its': 5,
-                           'pc_type': 'bjacobi',
-                           'sub_pc_type': 'ilu'}
+        inner_parameters = {
+            'ksp_type': 'fgmres',
+            'ksp_rtol': args.rtol,
+            'ksp_atol': 1.0e-13,
+            'ksp_max_it': 100,
+            'pc_type': 'gamg',
+            'pc_gamg_sym_graph': True,
+            'mg_levels': {
+                'ksp_type': 'gmres',
+                'ksp_max_it': 5,
+                'pc_type': 'bjacobi',
+                'sub_pc_type': 'ilu'
+            }
          }
     else:
         inner_parameters = {
@@ -365,19 +364,19 @@ if hybrid:
             'ksp_rtol': args.rtol,
             'ksp_max_it': 100,
             'pc_type': 'gamg',
-            'mg_levels': {'ksp_type': 'richardson',
-                          'ksp_richardson_scale': args.richardson_scale,
-                          'pc_type': 'bjacobi',
-                          'sub_pc_type': 'ilu'}
+            'mg_levels': {
+                'ksp_type': 'richardson',
+                'ksp_richardson_scale': args.richardson_scale,
+                'pc_type': 'bjacobi',
+                'sub_pc_type': 'ilu'
+            }
         }
-
     if args.debug:
         inner_parameters['ksp_monitor_true_residual'] = True
 
     # Use Firedrake static condensation interface
     solver_parameters = {
         'mat_type': 'matfree',
-        'pmat_type': 'matfree',
         'ksp_type': 'preonly',
         'pc_type': 'python',
         'pc_python_type': 'firedrake.SCPC',
@@ -401,28 +400,37 @@ else:
     # all. For larger dt, not even the gmres + approx sc approach behaves well.
 
     # Aggressive AMG procedure
-    mg_params = {'ksp_type': 'chebyshev',
-                 'ksp_chebyshev_esteig': True,
-                 'ksp_max_it': 5,
-                 'pc_type': 'bjacobi',
-                 'sub_pc_type': 'ilu'}
+    mg_params = {
+        'ksp_type': 'chebyshev',
+        'ksp_chebyshev_esteig': True,
+        'ksp_max_it': 5,
+        'pc_type': 'bjacobi',
+        'sub_pc_type': 'ilu'
+    }
 
-    solver_parameters = {'pc_type': 'fieldsplit',
-                         'pc_fieldsplit_type': 'schur',
-                         'ksp_type': 'gmres',
-                         'ksp_rtol': args.rtol,
-                         'ksp_max_it': 100,
-                         'ksp_gmres_restart': 30,
-                         'pc_fieldsplit_schur_fact_type': 'FULL',
-                         'pc_fieldsplit_schur_precondition': 'selfp',
-                         'fieldsplit_0': {'ksp_type': 'preonly',
-                                          'pc_type': 'bjacobi',
-                                          'sub_pc_type': 'ilu'},
-                         'fieldsplit_1': {'ksp_type': 'preonly',
-                                          'pc_type': 'gamg',
-                                          'pc_gamg_sym_graph': True,
-                                          'pc_gamg_reuse_interpolation': True,
-                                          'mg_levels': mg_params}}
+    solver_parameters = {
+        'pc_type': 'fieldsplit',
+        'pc_fieldsplit_type': 'schur',
+        'ksp_type': 'gmres',
+        'ksp_rtol': args.rtol,
+        'ksp_max_it': 100,
+        'ksp_gmres_restart': 30,
+        'pc_fieldsplit_schur_fact_type': 'FULL',
+        'pc_fieldsplit_schur_precondition': 'selfp',
+        'fieldsplit_0': {
+            'ksp_type': 'preonly',
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu'
+        },
+        'fieldsplit_1': {
+            'ksp_type': 'preonly',
+            'pc_type': 'gamg',
+            'pc_gamg_sym_graph': True,
+            'pc_gamg_reuse_interpolation': True,
+            'mg_levels': mg_params
+        }
+    }
+
     if args.debug:
         solver_parameters['ksp_monitor_true_residual'] = True
 
@@ -438,7 +446,9 @@ else:
 compressible_forcing = CompressibleForcing(state)
 
 # Build time stepper
-stepper = CrankNicolson(state, advected_fields, linear_solver,
+stepper = CrankNicolson(state,
+                        advected_fields,
+                        linear_solver,
                         compressible_forcing)
 
 PETSc.Sys.Print("Starting simulation...\n")
