@@ -2,9 +2,10 @@
 Credit for demo setup: Gusto development team
 """
 from gusto import *
-from firedrake import PeriodicIntervalMesh, ExtrudedMesh, \
-    SpatialCoordinate, Constant, DirichletBC, pi, cos, Function, sqrt, \
-    conditional, parameters
+from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
+                       SpatialCoordinate, Constant, DirichletBC,
+                       pi, cos, Function, sqrt,
+                       conditional)
 from firedrake.petsc import PETSc
 from argparse import ArgumentParser
 from hybridization import HybridizedCompressibleSolver
@@ -19,6 +20,7 @@ delta_dt = {50.: 0.25,
             800.: 4.}
 
 PETSc.Log.begin()
+
 parser = ArgumentParser(description="""
 Dense bubble test by Straka et al (1993).
 """, add_help=False)
@@ -63,8 +65,6 @@ if args.help:
     sys.exit(1)
 
 if args.profile:
-    # Ensures accurate timing of parallel loops
-    parameters["pyop2_options"]["lazy_evaluation"] = False
     tmax = 20*delta_dt[args.delta]
 
 if args.test:
@@ -75,7 +75,8 @@ if not args.test and not args.profile:
 
 delta = args.delta
 dt = delta_dt[delta]
-hybrid = bool(args.hybridization)
+hybridization = bool(args.hybridization)
+
 PETSc.Sys.Print("""
 Problem parameters:\n
 Test case: Straka falling dense bubble.\n
@@ -84,14 +85,18 @@ delta: %s,\n
 Profiling: %s,\n
 Test run: %s,\n
 Dump frequency: %s.\n
-""" % (hybrid, delta, bool(args.profile), bool(args.test), args.dumpfreq))
+""" % (hybridization,
+       delta,
+       bool(args.profile),
+       bool(args.test),
+       args.dumpfreq))
 
 PETSc.Sys.Print("Initializing problem with dt: %s and tmax: %s.\n" % (dt,
                                                                       tmax))
 L = 51200.
 H = 6400.  # Height position of the model top
 
-if hybrid:
+if hybridization:
     dirname = "hybrid_db_dx%s_dt%s" % (delta, dt)
 else:
     dirname = "db_dx%s_dt%s" % (delta, dt)
@@ -112,7 +117,9 @@ parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
 
-state = State(mesh, vertical_degree=1, horizontal_degree=1,
+state = State(mesh,
+              vertical_degree=1,
+              horizontal_degree=1,
               family="CG",
               timestepping=timestepping,
               output=output,
@@ -138,32 +145,36 @@ theta_b = Function(Vt).interpolate(Tsurf)
 rho_b = Function(Vr)
 
 # Calculate hydrostatic Pi
-params = {'pc_type': 'fieldsplit',
-          'pc_fieldsplit_type': 'schur',
-          'ksp_type': 'gmres',
-          'ksp_monitor_true_residual': True,
-          'ksp_max_it': 1000,
-          'ksp_gmres_restart': 50,
-          'pc_fieldsplit_schur_fact_type': 'FULL',
-          'pc_fieldsplit_schur_precondition': 'selfp',
-          'fieldsplit_0': {'ksp_type': 'preonly',
-                           'pc_type': 'bjacobi',
-                           'sub_pc_type': 'ilu'},
-          'fieldsplit_1': {'ksp_type': 'preonly',
-                           'pc_type': 'gamg',
-                           'pc_gamg_sym_graph': True,
-                           'mg_levels': {'ksp_type': 'chebyshev',
-                                         'ksp_chebyshev_esteig': True,
-                                         'ksp_max_it': 5,
-                                         'pc_type': 'bjacobi',
-                                         'sub_pc_type': 'ilu'}}}
+PETSc.Sys.Print("Computing hydrostatic varaibles...\n")
 
-PETSc.Sys.Print("Computing hydrostatic Exner pressure...\n")
+# Use vertical hybridization preconditioner for the balance initialization
+piparams = {
+    'ksp_type': 'preonly',
+    'pc_type': 'python',
+    'mat_type': 'matfree',
+    'pc_python_type': 'gusto.VerticalHybridizationPC',
+    'vert_hybridization': {
+        'ksp_type': 'gmres',
+        'pc_type': 'gamg',
+        'pc_gamg_sym_graph': True,
+        'ksp_rtol': 1e-12,
+        'ksp_atol': 1e-12,
+        'mg_levels': {
+            'ksp_type': 'richardson',
+            'ksp_max_it': 5,
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu'
+        }
+    }
+}
+if args.debug:
+    piparams['vert_hybridization']['ksp_monitor_true_residual'] = True
+
 compressible_hydrostatic_balance(state,
                                  theta_b,
                                  rho_b,
                                  solve_for_rho=True,
-                                 params=params)
+                                 params=piparams)
 
 x = SpatialCoordinate(mesh)
 a = 5.0e3
@@ -202,63 +213,68 @@ advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
 advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
 # Set up linear solver
-if hybrid:
+if hybridization:
+    inner_parameters = {
+        'ksp_type': 'fgmres',
+        'ksp_rtol': 1.0e-8,
+        'ksp_atol': 1.0e-8,
+        'ksp_max_it': 100,
+        'pc_type': 'gamg',
+        'pc_gamg_sym_graph': True,
+        'mg_levels': {
+            'ksp_type': 'gmres',
+            'ksp_max_its': 5,
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu'
+        }
+    }
     if args.debug:
-        inner_parameters = {
-             'ksp_type': 'fgmres',
-             'ksp_rtol': 1.0e-8,
-             'ksp_atol': 1.0e-8,
-             'ksp_max_it': 100,
-             'pc_type': 'gamg',
-             'pc_gamg_sym_graph': True,
-             'mg_levels': {'ksp_type': 'gmres',
-                           'ksp_max_its': 5,
-                           'pc_type': 'bjacobi',
-                           'sub_pc_type': 'ilu'}
-         }
         inner_parameters['ksp_monitor_true_residual'] = True
 
-        # Use Firedrake static condensation interface
-        solver_parameters = {
-            'mat_type': 'matfree',
-            'pmat_type': 'matfree',
-            'ksp_type': 'preonly',
-            'pc_type': 'python',
-            'pc_python_type': 'firedrake.SCPC',
-            'pc_sc_eliminate_fields': '0, 1',
-            'condensed_field': inner_parameters
-        }
-        linear_solver = HybridizedCompressibleSolver(state,
-                                                     solver_parameters=solver_parameters,
-                                                     overwrite_solver_parameters=True)
-    else:
-        linear_solver = HybridizedCompressibleSolver(state)
+    # Use Firedrake's static condensation interface
+    solver_parameters = {
+        'mat_type': 'matfree',
+        'ksp_type': 'preonly',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.SCPC',
+        'pc_sc_eliminate_fields': '0, 1',
+        'condensed_field': inner_parameters
+    }
+    linear_solver = HybridizedCompressibleSolver(state,
+                                                 solver_parameters=solver_parameters,
+                                                 overwrite_solver_parameters=True)
 else:
-    if args.debug:
-        solver_parameters = {
-            'pc_type': 'fieldsplit',
-            'pc_fieldsplit_type': 'schur',
-            'ksp_type': 'gmres',
-            'ksp_monitor_true_residual': True,
-            'ksp_max_it': 100,
-            'ksp_gmres_restart': 50,
-            'pc_fieldsplit_schur_fact_type': 'FULL',
-            'pc_fieldsplit_schur_precondition': 'selfp',
-            'fieldsplit_0': {'ksp_type': 'preonly',
-                             'pc_type': 'bjacobi',
-                             'sub_pc_type': 'ilu'},
-            'fieldsplit_1': {'ksp_type': 'preonly',
-                             'pc_type': 'gamg',
-                             'mg_levels': {'ksp_type': 'chebyshev',
-                                           'ksp_chebyshev_esteig': True,
-                                           'ksp_max_it': 1,
-                                           'pc_type': 'bjacobi',
-                                           'sub_pc_type': 'ilu'}}
+    solver_parameters = {
+        'pc_type': 'fieldsplit',
+        'pc_fieldsplit_type': 'schur',
+        'ksp_type': 'gmres',
+        'ksp_max_it': 100,
+        'ksp_gmres_restart': 50,
+        'pc_fieldsplit_schur_fact_type': 'FULL',
+        'pc_fieldsplit_schur_precondition': 'selfp',
+        'fieldsplit_0': {
+            'ksp_type': 'preonly',
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu'
+        },
+        'fieldsplit_1': {
+            'ksp_type': 'preonly',
+            'pc_type': 'gamg',
+            'pc_gamg_sym_graph': True,
+            'mg_levels': {
+                'ksp_type': 'chebyshev',
+                'ksp_chebyshev_esteig': True,
+                'ksp_max_it': 5,
+                'pc_type': 'bjacobi',
+                'sub_pc_type': 'ilu'}
         }
-        linear_solver = CompressibleSolver(state, solver_parameters=solver_parameters,
-                                           overwrite_solver_parameters=True)
-    else:
-        linear_solver = CompressibleSolver(state)
+    }
+    if args.debug:
+        solver_parameters['ksp_monitor_true_residual'] = True
+
+    linear_solver = CompressibleSolver(state,
+                                       solver_parameters=solver_parameters,
+                                       overwrite_solver_parameters=True)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
