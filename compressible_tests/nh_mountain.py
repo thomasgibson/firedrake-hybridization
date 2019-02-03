@@ -304,7 +304,6 @@ if hybridization:
     # Use Firedrake's static condensation interface
     solver_parameters = {
         'mat_type': 'matfree',
-        'pmat_type': 'matfree',
         'ksp_type': 'preonly',
         'pc_type': 'python',
         'pc_python_type': 'firedrake.SCPC',
