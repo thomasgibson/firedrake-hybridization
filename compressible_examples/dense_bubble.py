@@ -12,7 +12,7 @@ import sys
 
 
 # Given a delta, return appropriate dt
-delta_dt = {50.: 0.5,
+delta_dt = {50.: 0.25,
             100.: 0.5,
             200.: 1.,
             400.: 2.,
