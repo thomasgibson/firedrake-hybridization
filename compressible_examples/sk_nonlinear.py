@@ -73,7 +73,7 @@ else:
 
 res = args.res
 nlayers = res*10         # horizontal layers
-columns = res*150        # number of columns
+columns = res*300        # number of columns
 dt = args.dt             # Time steps (s)
 
 if args.profile:
@@ -142,7 +142,9 @@ output = OutputParameters(dirname=dirname,
                           dumpfreq=dumpfreq,
                           dumplist=['u'],
                           perturbation_fields=['theta', 'rho'],
-                          point_data=[('theta_perturbation', points)])
+                          point_data=[('theta_perturbation', points)],
+                          log_level='INFO')
+
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
@@ -210,7 +212,7 @@ piparams = {
     }
 }
 if args.debug:
-    piparams['vert_hybridization']['ksp_monitor_true_residual'] = True
+    piparams['vert_hybridization']['ksp_monitor_true_residual'] = None
 
 compressible_hydrostatic_balance(state,
                                  theta_b,
@@ -287,7 +289,7 @@ if hybridization:
         }
     }
     if args.debug:
-        inner_parameters['ksp_monitor_true_residual'] = True
+        inner_parameters['ksp_monitor_true_residual'] = None
 
     # Use Firedrake's static condensation interface
     solver_parameters = {
@@ -328,7 +330,7 @@ else:
         }
     }
     if args.debug:
-        solver_parameters['ksp_monitor_true_residual'] = True
+        solver_parameters['ksp_monitor_true_residual'] = None
 
     linear_solver = CompressibleSolver(state,
                                        solver_parameters=solver_parameters,
