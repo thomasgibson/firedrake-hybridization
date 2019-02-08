@@ -8,12 +8,11 @@ from firedrake import (PeriodicIntervalMesh, ExtrudedMesh,
                        conditional)
 from firedrake.petsc import PETSc
 from argparse import ArgumentParser
-from hybridization import HybridizedCompressibleSolver
 import sys
 
 
 # Given a delta, return appropriate dt
-delta_dt = {50.: 0.25,
+delta_dt = {50.: 0.5,
             100.: 0.5,
             200.: 1.,
             400.: 2.,
@@ -108,11 +107,15 @@ m = PeriodicIntervalMesh(columns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 
 fieldlist = ['u', 'rho', 'theta']
+
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
+
 output = OutputParameters(dirname=dirname,
                           dumpfreq=args.dumpfreq,
                           dumplist=['u'],
-                          perturbation_fields=['theta', 'rho'])
+                          perturbation_fields=['theta', 'rho'],
+                          log_level='INFO')
+
 parameters = CompressibleParameters()
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber()]
@@ -168,7 +171,7 @@ piparams = {
     }
 }
 if args.debug:
-    piparams['vert_hybridization']['ksp_monitor_true_residual'] = True
+    piparams['vert_hybridization']['ksp_monitor_true_residual'] = None
 
 compressible_hydrostatic_balance(state,
                                  theta_b,
@@ -229,7 +232,7 @@ if hybridization:
         }
     }
     if args.debug:
-        inner_parameters['ksp_monitor_true_residual'] = True
+        inner_parameters['ksp_monitor_true_residual'] = None
 
     # Use Firedrake's static condensation interface
     solver_parameters = {
@@ -270,7 +273,7 @@ else:
         }
     }
     if args.debug:
-        solver_parameters['ksp_monitor_true_residual'] = True
+        solver_parameters['ksp_monitor_true_residual'] = None
 
     linear_solver = CompressibleSolver(state,
                                        solver_parameters=solver_parameters,
