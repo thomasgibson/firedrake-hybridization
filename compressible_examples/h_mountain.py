@@ -156,7 +156,7 @@ output = OutputParameters(dirname=dirname,
 parameters = CompressibleParameters(g=9.80665, cp=1004.)
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber(),
-                     VelocityZ(),
+                     VelocityZ(degree=2),
                      HydrostaticImbalance()]
 
 state = State(mesh,
