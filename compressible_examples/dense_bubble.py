@@ -12,7 +12,8 @@ import sys
 
 
 # Given a delta, return appropriate dt
-delta_dt = {50.: 0.25,
+delta_dt = {25.: 0.125,
+            50.: 0.25,
             100.: 0.5,
             200.: 1.,
             400.: 2.,
@@ -27,8 +28,8 @@ Dense bubble test by Straka et al (1993).
 parser.add_argument("--delta",
                     default=800.0,
                     type=float,
-                    choices=[800.0, 400.0, 200.0, 100.0, 50.0],
-                    help="Resolution for the simulation.")
+                    choices=[800.0, 400.0, 200.0, 100.0, 50.0, 25.0],
+                    help="Resolution (m) in x and z for the simulation.")
 
 parser.add_argument("--hybridization",
                     action="store_true",
@@ -43,10 +44,11 @@ parser.add_argument("--profile",
                     help="Turn on profiling for a 20 time-step run.")
 
 parser.add_argument("--dumpfreq",
-                    default=5,
+                    # default is write output in increments of 50s
+                    default=50,
                     type=int,
                     action="store",
-                    help="Dump frequency of output files.")
+                    help="Dump frequency (s) of output files.")
 
 parser.add_argument("--debug",
                     action="store_true",
@@ -111,7 +113,7 @@ fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=args.dumpfreq,
+                          dumpfreq=int(args.dumpfreq/dt),
                           dumplist=['u'],
                           perturbation_fields=['theta', 'rho'],
                           log_level='INFO')
