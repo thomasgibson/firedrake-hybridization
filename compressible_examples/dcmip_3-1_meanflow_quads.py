@@ -158,6 +158,9 @@ if args.profile:
 
 if args.test:
     tmax = dt
+else:
+    assert not args.profile, "Don't profile an entire simulation."
+    tmax = 3600.
 
 PETSc.Sys.Print("Initializing problem with dt: %s and tmax: %s.\n" % (dt,
                                                                       tmax))
@@ -292,62 +295,23 @@ state.set_reference_profiles([('rho', rho_b), ('theta', theta_b)])
 # Set up advection schemes
 ueqn = EulerPoincare(state, Vu)
 rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-
-supg = True
-if supg:
-    thetaeqn = SUPGAdvection(state, Vt,
-                             supg_params={"dg_direction": "horizontal"},
-                             equation_form="advective")
-else:
-    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
-
+thetaeqn = SUPGAdvection(state, Vt,
+                         equation_form="advective")
 advected_fields = []
 advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
-advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
+advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn, subcycles=2)))
+advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn, subcycles=2)))
 
 # Set up linear solver
 if hybrid:
     PETSc.Sys.Print("""
     Setting up hybridized solver on the traces.""")
 
-    # inner_parameters = {'ksp_type': 'gmres',
-    #                     "ksp_gmres_modifiedgramschmidt": True,
-    #                     'ksp_max_it': 100,
-    #                     'ksp_rtol': 1.0e-8,
-    #                     'pc_type': 'hypre',
-    #                     'pc_hypre_type': 'boomeramg',
-    #                     "pc_hypre_boomeramg_no_CF": True,
-    #                     "pc_hypre_boomeramg_coarsen_type": "HMIS",
-    #                     "pc_hypre_boomeramg_interp_type": "ext+i",
-    #                     "pc_hypre_boomeramg_smooth_type": "Euclid",
-    #                     "pc_hypre_boomeramg_P_max": 4,
-    #                     "pc_hypre_boomeramg_agg_nl": 1,
-    #                     "pc_hypre_boomeramg_agg_num_paths": 2}
-
-    # Bi-CG-stab + block ILU PC
-    # inner_parameters = {
-    #     'ksp_type': 'bcgs',
-    #     'ksp_max_it': 100,
-    #     'pc_type': 'bjacobi',
-    #     'sub_pc_type': 'ilu',
-    #     'ksp_rtol': args.rtol
-    # }
-
-    # GMRES + block ILU PC
-    # inner_parameters = {
-    #     'ksp_type': 'gmres',
-    #     'ksp_rtol': args.rtol,
-    #     'ksp_max_it': 100,
-    #     'pc_type': 'bjacobi',
-    #     'sub_pc_type': 'ilu'
-    # }
-
     if args.flexsolver:
         inner_parameters = {
             'ksp_type': 'fgmres',
             'ksp_rtol': args.rtol,
-            'ksp_atol': 1.0e-13,
+            'ksp_atol': 1.0e-8,
             'ksp_max_it': 100,
             'pc_type': 'gamg',
             'pc_gamg_sym_graph': True,

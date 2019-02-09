@@ -25,10 +25,6 @@ parser.add_argument("--test",
                     action="store_true",
                     help="Enable a quick test run.")
 
-parser.add_argument("--profile",
-                    action="store_true",
-                    help="Turn on profiling for a 20 time-step run.")
-
 parser.add_argument("--dt",
                     action="store",
                     default=6.0,
@@ -40,10 +36,6 @@ parser.add_argument("--res",
                     type=int,
                     action="store",
                     help="Resolution scaling parameter")
-
-parser.add_argument("--recovered",
-                    action="store_true",
-                    help="Use recovered spaces advection scheme.")
 
 parser.add_argument("--dumpfreq",
                     default=1,
@@ -76,13 +68,9 @@ nlayers = res*10         # horizontal layers
 columns = res*300        # number of columns
 dt = args.dt             # Time steps (s)
 
-if args.profile:
-    tmax = 20*dt
-
 if args.test:
     tmax = dt
-
-if not args.test and not args.profile:
+else:
     tmax = 3600.
 
 H = 1.0e4  # Height position of the model top
@@ -104,14 +92,12 @@ Problem parameters:\n
 Test case: Skamarock and Klemp gravity wave.\n
 Hybridized compressible solver: %s,\n
 Time-step size: %s,\n
-Profiling: %s,\n
 Test run: %s,\n
 Dx (m): %s,\n
 Dz (m): %s,\n
 CFL: %s\n
 """ % (hybridization,
        dt,
-       bool(args.profile),
        bool(args.test),
        dx,
        dz,
@@ -235,40 +221,18 @@ state.set_reference_profiles([('rho', rho_b),
                               ('theta', theta_b)])
 
 # Set up advection schemes
-advected_fields = []
-recovered = args.recovered
-if recovered:
-    VDG1 = FunctionSpace(mesh, "DG", 1)
-    VCG1 = FunctionSpace(mesh, "CG", 1)
-    Vt_brok = FunctionSpace(mesh, BrokenElement(Vt.ufl_element()))
-    Vu_DG1 = VectorFunctionSpace(mesh, "DG", 1)
-    Vu_CG1 = VectorFunctionSpace(mesh, "CG", 1)
+ueqn = EulerPoincare(state, Vu)
+rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 
-    u_spaces = (Vu_DG1, Vu_CG1, Vu)
-    rho_spaces = (VDG1, VCG1, Vr)
-    theta_spaces = (VDG1, VCG1, Vt_brok)
-
-    ueqn = EmbeddedDGAdvection(state, Vu, equation_form="advective",
-                               recovered_spaces=u_spaces)
-    rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity",
-                                 recovered_spaces=rho_spaces)
-    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective",
-                                   recovered_spaces=theta_spaces)
-    advected_fields.append(('u', SSPRK3(state, u0, ueqn)))
+supg = True
+if supg:
+    thetaeqn = SUPGAdvection(state, Vt, equation_form="advective")
 else:
-    ueqn = EulerPoincare(state, Vu)
-    rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
+    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective",
+                                   options=EmbeddedDGOptions())
 
-    supg = True
-    if supg:
-        thetaeqn = SUPGAdvection(state, Vt,
-                                 supg_params={"dg_direction": "horizontal"},
-                                 equation_form="advective")
-    else:
-        thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
-
-    advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
-
+advected_fields = []
+advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
 advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn)))
 advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
@@ -337,10 +301,7 @@ else:
                                        overwrite_solver_parameters=True)
 
 # Set up forcing
-if recovered:
-    compressible_forcing = CompressibleForcing(state, euler_poincare=False)
-else:
-    compressible_forcing = CompressibleForcing(state)
+compressible_forcing = CompressibleForcing(state)
 
 # Build time stepper
 stepper = CrankNicolson(state,

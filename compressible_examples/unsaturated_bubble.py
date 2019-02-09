@@ -32,10 +32,6 @@ parser.add_argument("--test",
                     action="store_true",
                     help="Enable a quick test run.")
 
-parser.add_argument("--profile",
-                    action="store_true",
-                    help="Turn on profiling for a 20 time-step run.")
-
 parser.add_argument("--dt",
                     default=1.,
                     type=float,
@@ -289,23 +285,14 @@ state.set_reference_profiles([('rho', rho_b),
 
 # Set up advection schemes
 if recovered:
-    ueqn = EmbeddedDGAdvection(state, Vu,
-                               equation_form="advective",
-                               options=u_opts)
-    rhoeqn = EmbeddedDGAdvection(state, Vr,
-                                 equation_form="continuity",
-                                 options=rho_opts)
-    thetaeqn = EmbeddedDGAdvection(state, Vt,
-                                   equation_form="advective",
-                                   options=theta_opts)
+    ueqn = EmbeddedDGAdvection(state, Vu, equation_form="advective", options=u_opts)
+    rhoeqn = EmbeddedDGAdvection(state, Vr, equation_form="continuity", options=rho_opts)
+    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=theta_opts)
     limiter = VertexBasedLimiter(VDG1)
 else:
     ueqn = EulerPoincare(state, Vu)
-    rhoeqn = AdvectionEquation(state, Vr,
-                               equation_form="continuity")
-    thetaeqn = EmbeddedDGAdvection(state, Vt,
-                                   equation_form="advective",
-                                   options=EmbeddedDGOptions())
+    rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
+    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=EmbeddedDGOptions())
     limiter = ThetaLimiter(Vt)
 
 u_advection = ('u', SSPRK3(state, u0, ueqn)) if recovered else ('u', ThetaMethod(state, u0, ueqn))

@@ -34,10 +34,6 @@ parser.add_argument("--test",
                     action="store_true",
                     help="Enable a quick test run.")
 
-parser.add_argument("--profile",
-                    action="store_true",
-                    help="Turn on profiling for a 20 time-step run.")
-
 parser.add_argument("--dt",
                     action="store",
                     default=5.0,
@@ -102,12 +98,10 @@ Time-step size: %s,\n
 Dx (m): %s,\n
 Dz (m): %s,\n
 CFL: %s,\n
-Profiling: %s,\n
 Test run: %s,\n
 Dump frequency: %s.\n
 """ % (hybridization,
        dt, dx, dz, cfl,
-       bool(args.profile),
        bool(args.test),
        args.dumpfreq*res))
 
@@ -204,9 +198,10 @@ PETSc.Sys.Print("Computing hydrostatic varaibles...\n")
 
 # Use vertical hybridization preconditioner for the balance initialization
 piparams = {
-    'ksp_type': 'preonly',
+    'ksp_type': 'gmres',
     'pc_type': 'python',
-    'mat_type': 'matfree',
+    'mat_type': 'aij',
+    'pmat_type': 'matfree',
     'pc_python_type': 'gusto.VerticalHybridizationPC',
     'vert_hybridization': {
         'ksp_type': 'gmres',
@@ -273,11 +268,10 @@ rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 
 supg = True
 if supg:
-    thetaeqn = SUPGAdvection(state, Vt,
-                             supg_params={"dg_direction": "horizontal"},
-                             equation_form="advective")
+    thetaeqn = SUPGAdvection(state, Vt, equation_form="advective")
 else:
-    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
+    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective",
+                                   options=EmbeddedDGOptions())
 
 advected_fields = []
 advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
