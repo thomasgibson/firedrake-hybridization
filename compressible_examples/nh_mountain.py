@@ -155,7 +155,9 @@ else:
 output = OutputParameters(dirname=dirname,
                           dumpfreq=args.dumpfreq*res,
                           dumplist=['u'],
-                          perturbation_fields=['theta', 'rho'])
+                          perturbation_fields=['theta', 'rho'],
+                          log_level='INFO')
+
 cparameters = CompressibleParameters(g=9.80665, cp=1004.)
 diagnostics = Diagnostics(*fieldlist)
 diagnostic_fields = [CourantNumber(),
@@ -221,7 +223,7 @@ piparams = {
     }
 }
 if args.debug:
-    piparams['vert_hybridization']['ksp_monitor_true_residual'] = True
+    piparams['vert_hybridization']['ksp_monitor_true_residual'] = None
 
 Pi = Function(Vr)
 rho_b = Function(Vr)
@@ -299,7 +301,7 @@ if hybridization:
         }
     }
     if args.debug:
-        inner_parameters['ksp_monitor_true_residual'] = True
+        inner_parameters['ksp_monitor_true_residual'] = None
 
     # Use Firedrake's static condensation interface
     solver_parameters = {
@@ -340,7 +342,7 @@ else:
         }
     }
     if args.debug:
-        solver_parameters['ksp_monitor_true_residual'] = True
+        solver_parameters['ksp_monitor_true_residual'] = None
 
     linear_solver = CompressibleSolver(state,
                                        solver_parameters=solver_parameters,
