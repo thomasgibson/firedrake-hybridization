@@ -34,10 +34,6 @@ parser.add_argument("--test",
                     action="store_true",
                     help="Enable a quick test run.")
 
-parser.add_argument("--profile",
-                    action="store_true",
-                    help="Turn on profiling for a 20 time-step run.")
-
 parser.add_argument("--dt",
                     default=5.,
                     type=float,
@@ -100,12 +96,10 @@ Hybridized compressible solver: %s,\n
 Time-step size: %s,\n
 Dx (m): %s,\n
 Dz (m): %s,\n
-Profiling: %s,\n
 Test run: %s,\n
 Dump frequency: %s.\n
 """ % (hybridization,
        dt, deltax, deltaz,
-       bool(args.profile),
        bool(args.test),
        args.dumpfreq*res))
 
@@ -114,8 +108,10 @@ PETSc.Sys.Print("Initializing problem with dt: %s and tmax: %s.\n" % (dt,
 
 PETSc.Sys.Print("Creating mesh with %s columns and %s layers...\n" % (columns,
                                                                       nlayers))
-# build volume mesh
+
 m = PeriodicIntervalMesh(columns, L)
+
+# build volume mesh
 ext_mesh = ExtrudedMesh(m, layers=nlayers, layer_height=H/nlayers)
 Vc = VectorFunctionSpace(ext_mesh, "DG", 2)
 coord = SpatialCoordinate(ext_mesh)
@@ -146,7 +142,7 @@ mubar = 0.3/dt
 mu_top = conditional(z <= zc, 0.0, mubar*sin((pi/2.)*(z-zc)/(H-zc))**2)
 mu = Function(W_DG).interpolate(mu_top)
 fieldlist = ['u', 'rho', 'theta']
-timestepping = TimesteppingParameters(dt=dt, alpha=0.5)
+timestepping = TimesteppingParameters(dt=dt, alpha=0.51)
 
 if hybridization:
     dirname += '_hybridization'
@@ -277,11 +273,10 @@ rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
 
 supg = True
 if supg:
-    thetaeqn = SUPGAdvection(state, Vt,
-                             supg_params={"dg_direction": "horizontal"},
-                             equation_form="advective")
+    thetaeqn = SUPGAdvection(state, Vt, equation_form="advective")
 else:
-    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective")
+    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective",
+                                   options=EmbeddedDGOptions())
 
 advected_fields = []
 advected_fields.append(("u", ThetaMethod(state, u0, ueqn)))
