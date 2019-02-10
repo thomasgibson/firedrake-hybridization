@@ -21,51 +21,46 @@ import sys
 
 PETSc.Log.begin()
 
-parser = ArgumentParser(description="""Moist rising bubble in an unsaturated atmosphere (Grabowski and Clark, 1991).""",
-                        add_help=False)
+parser = ArgumentParser(description="""
+Thermal rising bubble test in unsaturated atmosphereby (Grabowski et al (1991))
+""", add_help=False)
 
 parser.add_argument("--hybridization",
                     action="store_true",
                     help="Use a hybridized compressible solver.")
 
-parser.add_argument("--test",
+parser.add_argument("--recovered",
                     action="store_true",
-                    help="Enable a quick test run.")
+                    help="Use recovered space advection scheme.")
 
-parser.add_argument("--dt",
-                    default=1.,
-                    type=float,
-                    action="store",
-                    help="Time step size (seconds)")
+parser.add_argument("--diffusion",
+                    action="store_true",
+                    help="Add diffusion.")
 
 parser.add_argument("--res",
                     default=1,
                     type=int,
                     action="store",
-                    help="Resolution scaling parameter.")
+                    help="Resolution scaling paramter.")
+
+parser.add_argument("--test",
+                    action="store_true",
+                    help="Enable a quick test run.")
 
 parser.add_argument("--dumpfreq",
+                    # default is write output in increments of 20s
                     default=20,
                     type=int,
                     action="store",
-                    help="Dump frequency of output files.")
+                    help="Dump frequency (s) of output files.")
 
 parser.add_argument("--debug",
                     action="store_true",
                     help="Turn on KSP monitors")
 
-parser.add_argument("recovered",
-                    action="store_true",
-                    help="Use recovered space scheme by TB.")
-
-parser.add_argument("diffusion",
-                    action="store_true",
-                    help="Add artificial diffusion")
-
 parser.add_argument("--help",
                     action="store_true",
                     help="Show help.")
-
 
 args, _ = parser.parse_known_args()
 
@@ -74,26 +69,49 @@ if args.help:
     PETSc.Sys.Print("%s\n" % help)
     sys.exit(1)
 
-dt = args.dt
 recovered = args.recovered
-hybridization = args.hybridization
 diffusion = args.diffusion
+hybridization = args.hybridization
+
+res_param = args.res
+dt = 0.5 / res_param
 
 if args.test:
     tmax = dt
 else:
     tmax = 600.
 
-deltax = 240. * args.res
+deltax = 240. / res_param
+dumpfreq = int(args.dumpfreq / dt)
 
 L = 3600.
 h = 2400.
-nlayers = int(h/deltax)
-ncolumns = int(L/deltax)
+nlayers = int(h / deltax)
+ncolumns = int(L / deltax)
+
+PETSc.Sys.Print("""
+Problem parameters:\n
+Test case: Unsaturated thermal rising bubble.\n
+dt: %s,\n
+Hybridized compressible solver: %s,\n
+Recovered space scheme: %s,\n
+Diffusion: %s,\n
+delta x = deltaz = %s,\n
+Dump frequency: %s.\n
+""" % (dt,
+       hybridization,
+       recovered,
+       diffusion,
+       deltax,
+       dumpfreq))
 
 m = PeriodicIntervalMesh(ncolumns, L)
 mesh = ExtrudedMesh(m, layers=nlayers, layer_height=h/nlayers)
-degree = 0 if recovered else 1
+
+if recovered:
+    degree = 0
+else:
+    degree = 1
 
 dirname = 'unsaturated_bubble'
 if recovered:
@@ -108,15 +126,12 @@ fieldlist = ['u', 'rho', 'theta']
 timestepping = TimesteppingParameters(dt=dt, maxk=4, maxi=1)
 
 output = OutputParameters(dirname=dirname,
-                          dumpfreq=args.dumpfreq*args.res,
+                          dumpfreq=dumpfreq,
                           dumplist=['u', 'rho', 'theta'],
                           perturbation_fields=['theta', 'water_v', 'rho'],
                           log_level='INFO')
-
 params = CompressibleParameters()
-
 diagnostics = Diagnostics(*fieldlist)
-
 diagnostic_fields = [RelativeHumidity(), Theta_e()]
 
 state = State(mesh,
@@ -179,7 +194,36 @@ theta_d = Function(Vt).interpolate(theta_surf * exp(S*z))
 H = Function(Vt).assign(humidity)
 
 # Calculate hydrostatic fields
-unsaturated_hydrostatic_balance(state, theta_d, H, pi_boundary=Constant(pi_surf))
+PETSc.Sys.Print("Computing hydrostatic varaibles...\n")
+
+piparams = {
+    'ksp_type': 'preonly',
+    'pc_type': 'python',
+    'mat_type': 'matfree',
+    'pc_python_type': 'gusto.VerticalHybridizationPC',
+    'vert_hybridization': {
+        'ksp_type': 'gmres',
+        'pc_type': 'gamg',
+        'pc_gamg_sym_graph': True,
+        'ksp_rtol': 1e-12,
+        'ksp_atol': 1e-12,
+        'mg_levels': {
+            'ksp_type': 'richardson',
+            'ksp_max_it': 5,
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu'
+        }
+    }
+}
+
+if args.debug:
+    piparams['vert_hybridization']['ksp_monitor_true_residual'] = None
+
+unsaturated_hydrostatic_balance(state, theta_d, H,
+                                pi_boundary=Constant(pi_surf),
+                                params=piparams)
+
+PETSc.Sys.Print("Finished computing hydrostatic varaibles.\n")
 
 # make mean fields
 theta_b = Function(Vt).assign(theta0)
@@ -204,8 +248,7 @@ H.assign(H + H_pert)
 # now need to find perturbed rho, theta_vd and r_v
 # follow approach used in unsaturated hydrostatic setup
 rho_averaged = Function(Vt)
-rho_recoverer = Recoverer(rho0, rho_averaged,
-                          VDG=Vt_brok,
+rho_recoverer = Recoverer(rho0, rho_averaged, VDG=Vt_brok,
                           boundary_method=physics_boundary_method)
 
 rho_h = Function(Vr)
@@ -235,10 +278,21 @@ rho_trial = TrialFunction(Vr)
 a = gamma * rho_trial * dxp
 L = gamma * (rho_b * theta_b / theta0) * dxp
 rho_problem = LinearVariationalProblem(a, L, rho_h)
-rho_solver = LinearVariationalSolver(rho_problem)
+
+cg_ilu_params = {'ksp_type': 'cg',
+                 'pc_type': 'bjacobi',
+                 'sub_pc_type': 'ilu'}
+
+if args.debug:
+    cg_ilu_params['ksp_monitor_true_residual'] = None
+
+rho_solver = LinearVariationalSolver(rho_problem,
+                                     solver_parameters=cg_ilu_params)
 
 max_outer_solve_count = 20
 max_inner_solve_count = 10
+
+PETSc.Sys.Print("Starting rho solver loop...\n")
 
 for i in range(max_outer_solve_count):
     # calculate averaged rho
@@ -268,7 +322,10 @@ for i in range(max_outer_solve_count):
     rho0.assign(rho0 * (1 - delta) + delta * rho_h)
 
     if i == max_outer_solve_count:
-        raise RuntimeError('Hydrostatic balance solve has not converged within %i' % i, 'iterations')
+        raise RuntimeError('Balance solve has not converged within %i' % i,
+                           'iterations')
+
+PETSc.Sys.Print("Finished rho solver loop.\n")
 
 water_c0.assign(0.0)
 rain0.assign(0.0)
@@ -292,11 +349,16 @@ if recovered:
 else:
     ueqn = EulerPoincare(state, Vu)
     rhoeqn = AdvectionEquation(state, Vr, equation_form="continuity")
-    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective", options=EmbeddedDGOptions())
+    thetaeqn = EmbeddedDGAdvection(state, Vt, equation_form="advective",
+                                   options=EmbeddedDGOptions())
     limiter = ThetaLimiter(Vt)
 
-u_advection = ('u', SSPRK3(state, u0, ueqn)) if recovered else ('u', ThetaMethod(state, u0, ueqn))
-euler_poincare = False if recovered else True
+if recovered:
+    u_advection = ('u', SSPRK3(state, u0, ueqn))
+    euler_poincare = False
+else:
+    u_advection = ('u', ThetaMethod(state, u0, ueqn))
+    euler_poincare = True
 
 advected_fields = [u_advection,
                    ('rho', SSPRK3(state, rho0, rhoeqn)),
@@ -305,10 +367,73 @@ advected_fields = [u_advection,
                    ('water_c', SSPRK3(state, water_c0, thetaeqn, limiter=limiter)),
                    ('rain', SSPRK3(state, rain0, thetaeqn, limiter=limiter))]
 
+# Set up linear solver
 if hybridization:
-    linear_solver = HybridizedCompressibleSolver(state, moisture=moisture)
+    inner_parameters = {
+        'ksp_type': 'fgmres',
+        'ksp_rtol': 1.0e-8,
+        'ksp_atol': 1.0e-8,
+        'ksp_max_it': 100,
+        'pc_type': 'gamg',
+        'pc_gamg_sym_graph': True,
+        'mg_levels': {
+            'ksp_type': 'gmres',
+            'ksp_max_its': 5,
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu'
+        }
+    }
+
+    if args.debug:
+        inner_parameters['ksp_monitor_true_residual'] = None
+
+    # Use Firedrake's static condensation interface
+    solver_parameters = {
+        'mat_type': 'matfree',
+        'ksp_type': 'preonly',
+        'pc_type': 'python',
+        'pc_python_type': 'firedrake.SCPC',
+        'pc_sc_eliminate_fields': '0, 1',
+        'condensed_field': inner_parameters
+    }
+    linear_solver = HybridizedCompressibleSolver(state,
+                                                 moisture=moisture,
+                                                 solver_parameters=solver_parameters,
+                                                 overwrite_solver_parameters=True)
 else:
-    linear_solver = CompressibleSolver(state, moisture=moisture)
+    solver_parameters = {
+        'pc_type': 'fieldsplit',
+        'pc_fieldsplit_type': 'schur',
+        'ksp_type': 'gmres',
+        'ksp_max_it': 100,
+        'ksp_gmres_restart': 50,
+        'pc_fieldsplit_schur_fact_type': 'FULL',
+        'pc_fieldsplit_schur_precondition': 'selfp',
+        'fieldsplit_0': {
+            'ksp_type': 'preonly',
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu'
+        },
+        'fieldsplit_1': {
+            'ksp_type': 'preonly',
+            'pc_type': 'gamg',
+            'pc_gamg_sym_graph': True,
+            'mg_levels': {
+                'ksp_type': 'chebyshev',
+                'ksp_chebyshev_esteig': True,
+                'ksp_max_it': 5,
+                'pc_type': 'bjacobi',
+                'sub_pc_type': 'ilu'}
+        }
+    }
+
+    if args.debug:
+        solver_parameters['ksp_monitor_true_residual'] = None
+
+    linear_solver = CompressibleSolver(state,
+                                       moisture=moisture,
+                                       solver_parameters=solver_parameters,
+                                       overwrite_solver_parameters=True)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state, moisture=moisture,
@@ -325,11 +450,15 @@ if diffusion:
                                                  mu=Constant(10./deltax), bcs=bcs)))
 
 # define condensation
-physics_list = [Fallout(state), Coalescence(state), Evaporation(state), Condensation(state)]
+physics_list = [Fallout(state),
+                Coalescence(state),
+                Evaporation(state),
+                Condensation(state)]
 
 # build time stepper
 stepper = CrankNicolson(state, advected_fields, linear_solver,
                         compressible_forcing, physics_list=physics_list,
                         diffused_fields=diffused_fields)
 
+PETSc.Sys.Print("Starting simulation...\n")
 stepper.run(t=0, tmax=tmax)
