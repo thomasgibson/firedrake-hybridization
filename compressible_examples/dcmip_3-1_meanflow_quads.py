@@ -273,7 +273,7 @@ pi_params = {
     }
 }
 if args.debug:
-    pi_params['vert_hybridization']['ksp_monitor_true_residual'] = True
+    pi_params['vert_hybridization']['ksp_monitor_true_residual'] = None
 
 compressible_hydrostatic_balance(state,
                                  theta_b,
@@ -334,7 +334,7 @@ if hybrid:
             }
         }
     if args.debug:
-        inner_parameters['ksp_monitor_true_residual'] = True
+        inner_parameters['ksp_monitor_true_residual'] = None
 
     # Use Firedrake static condensation interface
     solver_parameters = {
@@ -394,7 +394,7 @@ else:
     }
 
     if args.debug:
-        solver_parameters['ksp_monitor_true_residual'] = True
+        solver_parameters['ksp_monitor_true_residual'] = None
 
     PETSc.Sys.Print("""
     Full solver options:\n
