@@ -148,12 +148,12 @@ Vertical layers: %s,\n
 Profiling: %s,\n
 Max time: %s,\n
 Dump frequency: %s,\n
-Generating output: %s\n,
+Generating output: %s,\n
 nu CFL: %s.
 """ % (hybrid, refinements,
        nlayers,
        bool(args.profile),
-       args.tmax,
+       tmax,
        args.dumpfreq,
        args.output,
        args.cfl))
