@@ -24,6 +24,12 @@ parser.add_argument("--test",
                     action="store_true",
                     help="Enable a quick test run.")
 
+parser.add_argument("--dt",
+                    default=0.0,
+                    type=float,
+                    action="store",
+                    help="Manually set dt")
+
 parser.add_argument("--profile",
                     action="store_true",
                     help="Turn on profiling.")
@@ -126,9 +132,16 @@ dx_min = sqrt(a_min)
 dx_max = sqrt(a_max)
 dx_avg = (dx_min + dx_max)/2.0
 u_max = u_0
+cs = 343.0
 
-# Take integer value
-dt = int(args.cfl * (dx_avg / 343.0))
+if args.dt == 0.0:
+    cfl = args.cfl
+    PETSc.Sys.Print("Determining Dt from specified horizontal CFL: %s" % cfl)
+    # Take integer value
+    dt = int(cfl * (dx_avg / cs))
+else:
+    dt = args.dt
+    cfl = dt * (cs / dx_avg)
 
 if args.profile:
     tmax = 5*dt
@@ -156,7 +169,7 @@ nu CFL: %s.
        tmax,
        args.dumpfreq,
        args.output,
-       args.cfl))
+       cfl))
 
 PETSc.Sys.Print("Initializing problem with dt: %s and tmax: %s.\n" % (dt,
                                                                       tmax))
