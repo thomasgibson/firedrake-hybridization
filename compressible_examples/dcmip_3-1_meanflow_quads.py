@@ -44,12 +44,6 @@ parser.add_argument("--cfl",
                     action="store",
                     help="CFL number to run at (determines dt).")
 
-parser.add_argument("--tmax",
-                    default=100.,
-                    type=float,
-                    action="store",
-                    help="Max time (s). Max test time was set to 3600s.")
-
 parser.add_argument("--refinements",
                     default=4,
                     type=int,
@@ -93,27 +87,10 @@ if args.help:
     PETSc.Sys.Print("%s\n" % help)
     sys.exit(1)
 
-tmax = args.tmax                # Maximum time (s)
 nlayers = args.layers           # Number of vertical layers
 refinements = args.refinements  # Number of horiz. cells = 20*(4^refinements)
 
 hybrid = bool(args.hybridization)
-PETSc.Sys.Print("""
-Problem parameters:\n
-Test case DCMIP 3-1: Non-orographic gravity waves on a small planet.\n
-Hybridized compressible solver: %s,\n
-Horizontal refinements: %s,\n
-Vertical layers: %s,\n
-Profiling: %s,\n
-Max time: %s,\n
-Dump frequency: %s.\n
-Generating output: %s\n
-""" % (hybrid, refinements,
-       nlayers,
-       bool(args.profile),
-       args.tmax,
-       args.dumpfreq,
-       args.output))
 
 # Set up problem parameters
 parameters = CompressibleParameters()
@@ -162,6 +139,25 @@ else:
     assert not args.profile, "Don't profile an entire simulation."
     tmax = 3600.
 
+PETSc.Sys.Print("""
+Problem parameters:\n
+Test case DCMIP 3-1: Non-orographic gravity waves on a small planet.\n
+Hybridized compressible solver: %s,\n
+Horizontal refinements: %s,\n
+Vertical layers: %s,\n
+Profiling: %s,\n
+Max time: %s,\n
+Dump frequency: %s,\n
+Generating output: %s\n,
+nu CFL: %s.
+""" % (hybrid, refinements,
+       nlayers,
+       bool(args.profile),
+       args.tmax,
+       args.dumpfreq,
+       args.output,
+       args.cfl))
+
 PETSc.Sys.Print("Initializing problem with dt: %s and tmax: %s.\n" % (dt,
                                                                       tmax))
 
@@ -175,6 +171,7 @@ mesh = ExtrudedMesh(m, layers=nlayers,
 W_VectorCG1 = VectorFunctionSpace(mesh, "CG", 1)
 
 x = SpatialCoordinate(mesh)
+
 # Create polar coordinates:
 # Since we use a CG1 field, this is constant on layers
 W_Q1 = FunctionSpace(mesh, "CG", 1)
@@ -226,23 +223,23 @@ u0.project(uexpr)
 # Surface temperature
 G = g**2/(N**2*c_p)
 Ts_expr = G + (T_eq-G)*exp(-(u_max*N**2/(4*g*g))*u_max*(cos(2.0*lat)-1.0))
-Ts = Function(W_CG1).interpolate(Ts_expr)
+Ts = Function(W_Q1).interpolate(Ts_expr)
 
 # Surface pressure
 ps_expr = p_eq*exp((u_max/(4.0*G*R_d))*u_max*(cos(2.0*lat)-1.0))*(Ts/T_eq)**(1.0/kappa)
-ps = Function(W_CG1).interpolate(ps_expr)
+ps = Function(W_Q1).interpolate(ps_expr)
 
 # Background pressure
 p_expr = ps*(1 + G/Ts*(exp(-N**2*z/g)-1))**(1.0/kappa)
-p = Function(W_CG1).interpolate(p_expr)
+p = Function(W_Q1).interpolate(p_expr)
 
 # Background temperature
 Tb_expr = G*(1 - exp(N**2*z/g)) + Ts*exp(N**2*z/g)
-Tb = Function(W_CG1).interpolate(Tb_expr)
+Tb = Function(W_Q1).interpolate(Tb_expr)
 
 # Background potential temperature
 thetab_expr = Tb*(p_0/p)**kappa
-thetab = Function(W_CG1).interpolate(thetab_expr)
+thetab = Function(W_Q1).interpolate(thetab_expr)
 theta_b = Function(theta0.function_space()).interpolate(thetab)
 rho_b = Function(rho0.function_space())
 sin_tmp = sin(lat) * sin(phi_c)
