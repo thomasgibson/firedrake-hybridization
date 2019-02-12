@@ -99,6 +99,8 @@ class Profiler(GCN):
         problem = solver._problem
         x = problem.u
 
+        PETSc.Log.Stage("Implicit solve").push()
+
         snes = PETSc.Log.Event("SNESSolve").getPerfInfo()
         ksp = PETSc.Log.Event("KSPSolve").getPerfInfo()
         pcsetup = PETSc.Log.Event("PCSetUp").getPerfInfo()
@@ -142,3 +144,5 @@ class Profiler(GCN):
             df = pd.DataFrame(data, index=[0])
             result_file = results + "%s.csv" % self.tag
             df.to_csv(result_file, index=False, mode="w", header=True)
+
+        PETSc.Log.Stage("Implicit solve").pop()
