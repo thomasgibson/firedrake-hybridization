@@ -98,6 +98,7 @@ class Profiler(GCN):
 
         problem = solver._problem
         x = problem.u
+        comm = x.function_space().mesh().comm
 
         PETSc.Log.Stage("Implicit solve").push()
 
@@ -108,7 +109,6 @@ class Profiler(GCN):
         jac_eval = PETSc.Log.Event("SNESJacobianEval").getPerfInfo()
         residual = PETSc.Log.Event("SNESFunctionEval").getPerfInfo()
 
-        comm = problem.comm
         snes_time = comm.allreduce(snes["time"], op=MPI.SUM) / comm.size
         ksp_time = comm.allreduce(ksp["time"], op=MPI.SUM) / comm.size
         pcsetup_time = comm.allreduce(pcsetup["time"], op=MPI.SUM) / comm.size
@@ -116,7 +116,7 @@ class Profiler(GCN):
         jac_time = comm.allreduce(jac_eval["time"], op=MPI.SUM) / comm.size
         res_time = comm.allreduce(residual["time"], op=MPI.SUM) / comm.size
 
-        num_cells = comm.allreduce(x.function_space().mesh.cell_set.size,
+        num_cells = comm.allreduce(x.function_space().mesh().cell_set.size,
                                    op=MPI.SUM)
         total_dofs = x.dof_dset.layout_vec.getSize()
 
@@ -136,7 +136,7 @@ class Profiler(GCN):
                     "PCApply": pcapply_time,
                     "SNESJacobianEval": jac_time,
                     "SNESFunctionEval": res_time,
-                    "num_processes": problem.comm.size,
+                    "num_processes": comm.size,
                     "num_cells": num_cells,
                     "total_dofs": total_dofs,
                     "ksp_iters": ksp.getIterationNumber()}
