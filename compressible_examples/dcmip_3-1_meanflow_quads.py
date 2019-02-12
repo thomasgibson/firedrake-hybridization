@@ -30,15 +30,8 @@ parser.add_argument("--dt",
                     action="store",
                     help="Manually set dt")
 
-parser.add_argument("--profile",
-                    action="store_true",
-                    help="Turn on profiling.")
-
-parser.add_argument("--output",
-                    action="store_true",
-                    help="Turn on output generation.")
-
 parser.add_argument("--dumpfreq",
+                    # dump every 100s by default
                     default=100,
                     type=int,
                     action="store",
@@ -143,13 +136,9 @@ else:
     dt = args.dt
     cfl = dt * (cs / dx_avg)
 
-if args.profile:
-    tmax = 5*dt
-
 if args.test:
     tmax = dt
 else:
-    assert not args.profile, "Don't profile an entire simulation."
     tmax = 3600.
 
 PETSc.Sys.Print("""
@@ -158,17 +147,13 @@ Test case DCMIP 3-1: Non-orographic gravity waves on a small planet.\n
 Hybridized compressible solver: %s,\n
 Horizontal refinements: %s,\n
 Vertical layers: %s,\n
-Profiling: %s,\n
 Max time: %s,\n
 Dump frequency: %s,\n
-Generating output: %s,\n
 nu CFL: %s.
 """ % (hybrid, refinements,
        nlayers,
-       bool(args.profile),
        tmax,
-       args.dumpfreq,
-       args.output,
+       int(args.dumpfreq / dt),
        cfl))
 
 PETSc.Sys.Print("Initializing problem with dt: %s and tmax: %s.\n" % (dt,
@@ -201,11 +186,10 @@ dirname = 'meanflow_ref'
 if hybrid:
     dirname += '_hybridization'
 
-output = OutputParameters(dumpfreq=args.dumpfreq, dirname=dirname,
+output = OutputParameters(dumpfreq=int(args.dumpfreq / dt),
+                          dirname=dirname,
                           perturbation_fields=['theta', 'rho'],
-                          dump_vtus=args.output,
-                          dump_diagnostics=args.output,
-                          checkpoint=args.output)
+                          log_level='INFO')
 
 diagnostics = Diagnostics(*fieldlist)
 
