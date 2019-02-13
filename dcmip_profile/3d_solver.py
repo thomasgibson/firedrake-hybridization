@@ -6,9 +6,24 @@ from firedrake import (CubedSphereMesh, ExtrudedMesh, Expression,
                        sqrt, asin, atan_2, Constant)
 from firedrake.petsc import PETSc
 from argparse import ArgumentParser
+from collections import namedtuple
 from profiler import Profiler
 import numpy as np
 import sys
+
+
+# Container object for storing parameter related information
+ParameterInfo = namedtuple("ParameterInfo",
+                           ["dt",
+                            "deltax",
+                            "deltaz",
+                            "horizontal_courant",
+                            "vertical_courant",
+                            "family",
+                            "model_degree",
+                            "mesh_degree",
+                            "solver_type",
+                            "inner_solver_type"])
 
 
 PETSc.Log.begin()
@@ -20,6 +35,23 @@ Profile of 3D compressible solver for the Euler equations (dry atmosphere).
 parser.add_argument("--hybridization",
                     action="store_true",
                     help="Use a hybridized compressible solver.")
+
+parser.add_argument("--model_degree",
+                    default=1,
+                    type=int,
+                    action="store",
+                    help="Model degree")
+
+parser.add_argument("--model_family",
+                    default="RTCF",
+                    choices=["RTCF"],
+                    help="Family of finite element spaces")
+
+parser.add_argument("--mesh_degree",
+                    default=3,
+                    type=int,
+                    action="store",
+                    help="Coordinate space degree")
 
 parser.add_argument("--cfl",
                     default=1.,
@@ -48,6 +80,10 @@ parser.add_argument("--richardson_scale",
 parser.add_argument("--flexsolver",
                     action="store_true",
                     help="Switch to flex-GMRES and AMG.")
+
+parser.add_argument("--gmres_ilu_only",
+                    action="store_true",
+                    help="Switch to only gmres+bilu on traces")
 
 parser.add_argument("--layers",
                     default=16,
@@ -83,7 +119,7 @@ hybrid = bool(args.hybridization)
 # Set up problem parameters
 parameters = CompressibleParameters()
 a_ref = 6.37122e6               # Radius of the Earth (m)
-X = 125.0                       # Reduced-size Earth reduction factor
+X = 1.0                         # Reduced-size Earth reduction factor
 a = a_ref/X                     # Scaled radius of planet (m)
 g = parameters.g                # Acceleration due to gravity (m/s^2)
 N = parameters.N                # Brunt-Vaisala frequency (1/s)
@@ -105,51 +141,63 @@ cs = sqrt(c_p * T_eq / gamma)   # Speed of sound of an air parcel
 # Cubed-sphere mesh
 m = CubedSphereMesh(radius=a,
                     refinement_level=refinements,
-                    degree=3)
+                    degree=args.mesh_degree)
 
 # Horizontal Courant (advective) number
 cell_vs = interpolate(CellVolume(m),
                       FunctionSpace(m, "DG", 0))
 
-a_min = cell_vs.dat.data.min()
 a_max = cell_vs.dat.data.max()
-dx_min = sqrt(a_min)
 dx_max = sqrt(a_max)
-dx_avg = (dx_min + dx_max)/2.0
 u_max = u_0
 
 if args.dt == 0.0:
     cfl = args.cfl
     PETSc.Sys.Print("Determining Dt from specified horizontal CFL: %s" % cfl)
-    # Take integer value
-    dt = int(cfl * (dx_avg / cs))
+    dt = cfl * (dx_max / cs)
+
 else:
     dt = args.dt
-    cfl = dt * (cs / dx_avg)
+    cfl = dt * (cs / dx_max)
 
-tmax = dt
+# Height position of the model top (m)
+z_top = 1.0e4
+deltaz = z_top / nlayers
+
+vertical_cfl = dt * (cs / deltaz)
 
 PETSc.Sys.Print("""
 Problem parameters:\n
 Test case DCMIP 3-1: Non-orographic gravity waves on a small planet.\n
 Speed of sound in compressible atmosphere: %s,\n
 Hybridized compressible solver: %s,\n
+Model degree: %s,\n
+Model discretization: %s,\n
+Mesh degree: %s,\n
 Horizontal refinements: %s,\n
 Vertical layers: %s,\n
-nu CFL: %s.
+Dx (max, m): %s,\n
+Dz (m): %s,\n
+Dt (s): %s,\n
+horizontal CFL: %s,\n
+vertical CFL: %s.
 """ % (cs,
        hybrid,
+       args.model_degree,
+       args.model_family,
+       args.mesh_degree,
        refinements,
        nlayers,
-       cfl))
+       dx_max,
+       deltaz,
+       dt,
+       cfl,
+       vertical_cfl))
 
-PETSc.Sys.Print("Initializing problem with dt: %s and tmax: %s.\n" % (dt,
-                                                                      tmax))
 
 # Build volume mesh
-z_top = 1.0e4            # Height position of the model top
 mesh = ExtrudedMesh(m, layers=nlayers,
-                    layer_height=z_top/nlayers,
+                    layer_height=deltaz,
                     extrusion_type="radial")
 
 # Space for initialising velocity (using this ensures things are in layers)
@@ -184,8 +232,10 @@ output = OutputParameters(dumpfreq=3600,
 
 diagnostics = Diagnostics(*fieldlist)
 
-state = State(mesh, vertical_degree=1, horizontal_degree=1,
-              family="RTCF",
+state = State(mesh,
+              vertical_degree=args.model_degree,
+              horizontal_degree=args.model_degree,
+              family=args.model_family,
               timestepping=timestepping,
               output=output,
               parameters=parameters,
@@ -290,10 +340,16 @@ advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn, subcycles=2)))
 
 # Set up linear solver
 if hybrid:
+
+    outer_solver_type = "Hybrid_SCPC"
+
     PETSc.Sys.Print("""
     Setting up hybridized solver on the traces.""")
 
     if args.flexsolver:
+
+        inner_solver_type = "fgmres_amg"
+
         inner_parameters = {
             'ksp_type': 'fgmres',
             'ksp_rtol': args.rtol,
@@ -308,12 +364,32 @@ if hybrid:
                 'sub_pc_type': 'ilu'
             }
          }
-    else:
+    elif args.gmres_ilu_only:
+
+        inner_solver_type = "gmres_ilu"
+
         inner_parameters = {
             'ksp_type': 'gmres',
             'ksp_rtol': args.rtol,
+            'ksp_atol': 1.e-8,
+            'ksp_max_it': 1000,
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu'
+        }
+
+    else:
+
+        inner_solver_type = (
+            "bcgs_amg_richardson_%s" % args.richardson_scale
+        )
+
+        inner_parameters = {
+            'ksp_type': 'bcgs',
+            'ksp_rtol': args.rtol,
+            'ksp_atol': 1.e-8,
             'ksp_max_it': 100,
             'pc_type': 'gamg',
+            'pc_gamg_sym_graph': True,
             'mg_levels': {
                 'ksp_type': 'richardson',
                 'ksp_richardson_scale': args.richardson_scale,
@@ -321,6 +397,7 @@ if hybrid:
                 'sub_pc_type': 'ilu'
             }
         }
+
     if args.debug:
         inner_parameters['ksp_monitor_true_residual'] = None
 
@@ -334,25 +411,22 @@ if hybrid:
         'condensed_field': inner_parameters
     }
 
-    PETSc.Sys.Print("""
-    Full solver options:\n
-    %s
-    """ % solver_parameters)
-    linear_solver = HybridizedCompressibleSolver(state,
-                                                 solver_parameters=solver_parameters,
-                                                 overwrite_solver_parameters=True)
+    linear_solver = HybridizedCompressibleSolver(
+        state,
+        solver_parameters=solver_parameters,
+        overwrite_solver_parameters=True
+    )
+
 else:
+
+    outer_solver_type = "GMRES_SchurPC"
+
     PETSc.Sys.Print("""
     Setting up GMRES fieldsplit solver with Schur complement PC.""")
 
-    # WARNING: I do not trust these parameters even for the non-hybrid case.
-    # I do not believe that the approximate Schur complement is symmetric at
-    # all. For larger dt, not even the gmres + approx sc approach behaves well.
-
     # Aggressive AMG procedure
     mg_params = {
-        'ksp_type': 'chebyshev',
-        'ksp_chebyshev_esteig': True,
+        'ksp_type': 'richardson',
         'ksp_max_it': 5,
         'pc_type': 'bjacobi',
         'sub_pc_type': 'ilu'
@@ -376,31 +450,41 @@ else:
             'ksp_type': 'preonly',
             'pc_type': 'gamg',
             'pc_gamg_sym_graph': True,
-            'pc_gamg_reuse_interpolation': True,
             'mg_levels': mg_params
         }
     }
 
+    inner_solver_type = "amg_richardson"
+
     if args.debug:
         solver_parameters['ksp_monitor_true_residual'] = None
 
-    PETSc.Sys.Print("""
-    Full solver options:\n
-    %s
-    """ % solver_parameters)
-    linear_solver = CompressibleSolver(state,
-                                       solver_parameters=solver_parameters,
-                                       overwrite_solver_parameters=True)
+    linear_solver = CompressibleSolver(
+        state,
+        solver_parameters=solver_parameters,
+        overwrite_solver_parameters=True
+    )
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
 
+param_info = ParameterInfo(dt=dt,
+                           deltax=dx_max,
+                           deltaz=deltaz,
+                           horizontal_courant=cfl,
+                           vertical_courant=vertical_cfl,
+                           family=args.model_family,
+                           model_degree=args.model_degree,
+                           mesh_degree=args.mesh_degree,
+                           solver_type=outer_solver_type,
+                           inner_solver_type=inner_solver_type)
+
 # Build profiler
-profiler = Profiler(state,
-                    advected_fields,
-                    linear_solver,
-                    compressible_forcing,
-                    label="Test")
+profiler = Profiler(parameterinfo=param_info,
+                    state=state,
+                    advected_fields=advected_fields,
+                    linear_solver=linear_solver,
+                    forcing=compressible_forcing)
 
 PETSc.Sys.Print("Starting profiler...\n")
-profiler.run(t=0, tmax=tmax)
+profiler.run(t=0, tmax=dt)
