@@ -1,7 +1,6 @@
 from gusto.configuration import logger
 from gusto.timeloop import CrankNicolson as GCN
 from gusto.linear_solvers import HybridizedCompressibleSolver
-from pyop2.profiling import timed_stage
 from mpi4py import MPI
 from firedrake.petsc import PETSc
 from firedrake import COMM_WORLD
@@ -25,7 +24,8 @@ class Profiler(GCN):
     def __init__(self, parameterinfo, state, advected_fields,
                  linear_solver, forcing,
                  diffused_fields=None, physics_list=None,
-                 prescribed_fields=None):
+                 prescribed_fields=None,
+                 suppress_data_output=False):
 
         super(Profiler, self).__init__(state=state,
                                        advected_fields=advected_fields,
@@ -46,6 +46,7 @@ class Profiler(GCN):
         self.tag = tag
         self._warm_run = False
         self.parameter_info = parameterinfo
+        self.suppress_data_output = suppress_data_output
 
     def implicit_step(self):
 
@@ -75,7 +76,8 @@ class Profiler(GCN):
 
         with PETSc.Log.Stage("warm_solve"):
             self.linear_solver.solve()
-            self.extract_ksp_info(solver)
+            if not self.suppress_data_output:
+                self.extract_ksp_info(solver)
 
         state.xnp1 += state.dy
 
