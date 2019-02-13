@@ -22,11 +22,10 @@ class Profiler(GCN):
              all Gusto stages needed for a complete simulation.
     """
 
-    def __init__(self, state, advected_fields,
+    def __init__(self, parameterinfo, state, advected_fields,
                  linear_solver, forcing,
                  diffused_fields=None, physics_list=None,
-                 prescribed_fields=None,
-                 label=None):
+                 prescribed_fields=None):
 
         super(Profiler, self).__init__(state=state,
                                        advected_fields=advected_fields,
@@ -41,13 +40,12 @@ class Profiler(GCN):
         else:
             self.hybridization = False
 
-        if label:
-            tag = "profile_%s" % label
-        else:
-            tag = "profile"
+        tag = "profile_dx%s_dz%s" % (int(parameterinfo.deltax),
+                                     int(parameterinfo.deltaz))
 
         self.tag = tag
         self._warm_run = False
+        self.parameter_info = parameterinfo
 
     def implicit_step(self):
 
@@ -75,12 +73,11 @@ class Profiler(GCN):
         solver.snes.setConvergenceHistory()
         solver.snes.ksp.setConvergenceHistory()
 
-        with timed_stage("Implicit solve"):
+        with PETSc.Log.Stage("warm_solve"):
             self.linear_solver.solve()
+            self.extract_ksp_info(solver)
 
         state.xnp1 += state.dy
-
-        self.extract_ksp_info(solver)
 
         self._apply_bcs()
 
@@ -99,8 +96,6 @@ class Profiler(GCN):
         problem = solver._problem
         x = problem.u
         comm = x.function_space().mesh().comm
-
-        PETSc.Log.Stage("Implicit solve").push()
 
         snes = PETSc.Log.Event("SNESSolve").getPerfInfo()
         ksp = PETSc.Log.Event("KSPSolve").getPerfInfo()
@@ -130,19 +125,33 @@ class Profiler(GCN):
             if not os.path.exists(os.path.dirname(results)):
                 os.makedirs(os.path.dirname(results))
 
-            data = {"SNESSolve": snes_time,
-                    "KSPSolve": ksp_time,
-                    "PCSetUp": pcsetup_time,
-                    "PCApply": pcapply_time,
-                    "SNESJacobianEval": jac_time,
-                    "SNESFunctionEval": res_time,
-                    "num_processes": comm.size,
-                    "num_cells": num_cells,
-                    "total_dofs": total_dofs,
-                    "ksp_iters": ksp.getIterationNumber()}
+            data = {
+                "SNESSolve": snes_time,
+                "KSPSolve": ksp_time,
+                "PCSetUp": pcsetup_time,
+                "PCApply": pcapply_time,
+                "SNESJacobianEval": jac_time,
+                "SNESFunctionEval": res_time,
+                "num_processes": comm.size,
+                "num_cells": num_cells,
+                "total_dofs": total_dofs,
+                "ksp_iters": ksp.getIterationNumber(),
+                "outer_solver_type": self.parameter_info.solver_type,
+                "inner_solver_type": self.parameter_info.inner_solver_type,
+                "dt": self.parameter_info.dt,
+                "deltax": self.parameter_info.deltax,
+                "deltaz": self.parameter_info.deltaz,
+                "horizontal_courant": self.parameter_info.horizontal_courant,
+                "vertical_courant": self.parameter_info.vertical_courant,
+                "model_family": self.parameter_info.family,
+                "model_degree": self.parameter_info.model_degree,
+                "mesh_degree": self.parameter_info.mesh_degree
+            }
 
             df = pd.DataFrame(data, index=[0])
-            result_file = results + "%s.csv" % self.tag
+            result_file = results + "%s_%s_%s_data.csv" % (
+                self.tag,
+                self.parameter_info.solver_type,
+                self.parameter_info.inner_solver_type
+            )
             df.to_csv(result_file, index=False, mode="w", header=True)
-
-        PETSc.Log.Stage("Implicit solve").pop()
