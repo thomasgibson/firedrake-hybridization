@@ -50,7 +50,7 @@ parser.add_argument("--refinements",
                     help="Resolution scaling parameter.")
 
 parser.add_argument("--richardson_scale",
-                    default=1.0,
+                    default=0.96,
                     type=float,
                     action="store",
                     help="Set the Richardson parameter for the trace system.")
@@ -78,6 +78,10 @@ parser.add_argument("--rtol",
                     type=float,
                     help="Rtolerance for the linear solve.")
 
+parser.add_argument("--suppress_data_output",
+                    action="store_true",
+                    help="Suppress data output.")
+
 parser.add_argument("--help",
                     action="store_true",
                     help="Show help.")
@@ -90,4 +94,4 @@ if args.help:
     sys.exit(1)
 
 
-run_profliler(args, suppress_data_output=True)
+run_profliler(args, suppress_data_output=args.suppress_data_output)
