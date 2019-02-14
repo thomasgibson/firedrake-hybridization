@@ -3,11 +3,11 @@ from firedrake import (CubedSphereMesh, ExtrudedMesh, IcosahedralSphereMesh,
                        FunctionSpace, Function,
                        SpatialCoordinate, as_vector, interpolate,
                        CellVolume, exp, acos, cos, sin,
-                       sqrt, asin, atan_2, op2, File)
+                       sqrt, asin, atan_2, op2)
 from firedrake.petsc import PETSc
 from collections import namedtuple
 from profiler import Profiler
-from gaussian import MultipleGaussians
+# from gaussian import MultipleGaussians
 import numpy as np
 
 np.random.seed(2097152)
@@ -229,7 +229,7 @@ vertical CFL: %s.
     r = a*acos(sin_tmp + cos_tmp*cos(lon-lamda_c))
     s = (d**2)/(d**2 + r**2)
     theta_pert = deltaTheta*s*sin(2*np.pi*z/L_z)
-    theta0.assign(0.0)
+    theta0.interpolate(theta_pert)
 
     # Compute the balanced density
     PETSc.Sys.Print("Computing balanced density field...\n")
@@ -305,7 +305,7 @@ Setting up hybridized solver on the traces.""")
             inner_parameters = {
                 'ksp_type': 'fgmres',
                 'ksp_rtol': args.rtol,
-                # 'ksp_atol': 1.0e-8,
+                'ksp_atol': args.atol,
                 'ksp_max_it': 100,
                 'pc_type': 'gamg',
                 'pc_gamg_sym_graph': True,
@@ -323,7 +323,7 @@ Setting up hybridized solver on the traces.""")
             inner_parameters = {
                 'ksp_type': 'gmres',
                 'ksp_rtol': args.rtol,
-                # 'ksp_atol': 1.e-8,
+                'ksp_atol': args.atol,
                 'ksp_max_it': 1000,
                 'pc_type': 'bjacobi',
                 'sub_pc_type': 'ilu'
@@ -338,7 +338,7 @@ Setting up hybridized solver on the traces.""")
             inner_parameters = {
                 'ksp_type': 'gmres',
                 'ksp_rtol': args.rtol,
-                # 'ksp_atol': 1.e-8,
+                'ksp_atol': args.atol,
                 'ksp_max_it': 100,
                 'pc_type': 'gamg',
                 'pc_gamg_sym_graph': True,
@@ -392,6 +392,7 @@ Setting up GMRES fieldsplit solver with Schur complement PC.""")
             'pc_fieldsplit_type': 'schur',
             'ksp_type': 'fgmres',
             'ksp_rtol': args.rtol,
+            'ksp_atol': args.atol,
             'ksp_max_it': 100,
             'ksp_gmres_restart': 30,
             'pc_fieldsplit_schur_fact_type': 'FULL',

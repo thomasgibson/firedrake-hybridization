@@ -76,7 +76,12 @@ parser.add_argument("--debug",
 parser.add_argument("--rtol",
                     default=1.0e-6,
                     type=float,
-                    help="Rtolerance for the linear solve.")
+                    help="Rtolerance for the linear solver.")
+
+parser.add_argument("--atol",
+                    default=1.e-8,
+                    type=float,
+                    help="Atolerance for the linear solver.")
 
 parser.add_argument("--suppress_data_output",
                     action="store_true",
