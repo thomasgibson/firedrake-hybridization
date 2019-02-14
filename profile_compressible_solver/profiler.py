@@ -57,13 +57,6 @@ class Profiler(GCN):
 
         state.xrhs -= state.xnp1
 
-        if not self._warm_run:
-            logger.info("Cold run, warming up solver.")
-            self.linear_solver.solve()
-            state.dy.assign(0.0)
-            self._warm_run = True
-            logger.info("Solver warmed up.")
-
         logger.info("Profiling linear solver.")
 
         if self.hybridization:
@@ -75,7 +68,7 @@ class Profiler(GCN):
         solver.snes.ksp.setConvergenceHistory()
 
         with PETSc.Log.Stage("warm_solve"):
-            self.linear_solver.solve()
+            solver.solve()
             if not self.suppress_data_output:
                 self.extract_ksp_info(solver)
 
