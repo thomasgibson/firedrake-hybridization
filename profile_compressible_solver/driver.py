@@ -345,10 +345,12 @@ Setting up hybridized solver on the traces.""")
                 'mg_levels': {
                     'ksp_type': 'richardson',
                     'ksp_richardson_scale': args.richardson_scale,
-                    'ksp_max_it': 5,
+                    'ksp_max_it': 6,
                     'pc_type': 'bjacobi',
-                    'sub_pc_type': 'sor',
-                    'sub_pc_sor_its': 3
+                    'sub_pc_type': 'ilu',
+                    'sub_pc_factor_levels': 0,
+                    'sub_pc_factor_in_place': True,
+                    'sub_pc_factor_pivot_in_blocks': True
                 }
             }
 
