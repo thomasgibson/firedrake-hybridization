@@ -4,6 +4,7 @@ from gusto.linear_solvers import HybridizedCompressibleSolver
 from mpi4py import MPI
 from firedrake.petsc import PETSc
 from firedrake import COMM_WORLD
+from pyop2.profiling import timed_stage
 
 import os
 import pandas as pd
@@ -48,16 +49,31 @@ class Profiler(GCN):
         self.parameter_info = parameterinfo
         self.suppress_data_output = suppress_data_output
 
-    def implicit_step(self):
+    def semi_implicit_step(self):
 
         state = self.state
+        dt = state.timestepping.dt
+        alpha = state.timestepping.alpha
 
-        # xrhs is the residual which goes in the linear solve
+        # Do some forcing and advection to get some crunchy data
+        with timed_stage("Apply forcing terms"):
+            self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
+                               state.xstar, implicit=False)
+
+        for name, advection in self.active_advection:
+            # first computes ubar from state.xn and state.xnp1
+            advection.update_ubar(state.xn, state.xnp1, alpha)
+            # advects a field from xstar and puts result in xp
+            advection.apply(self.xstar_fields[name], self.xp_fields[name])
+
         state.xrhs.assign(0.0)
 
-        state.xrhs -= state.xnp1
+        with timed_stage("Apply forcing terms"):
+            self.forcing.apply(alpha*dt, state.xp, state.xnp1,
+                               state.xrhs, implicit=True,
+                               incompressible=self.incompressible)
 
-        logger.info("Profiling linear solver.")
+        state.xrhs -= state.xnp1
 
         if self.hybridization:
             solver = self.linear_solver.hybridized_solver
@@ -67,7 +83,7 @@ class Profiler(GCN):
         solver.snes.setConvergenceHistory()
         solver.snes.ksp.setConvergenceHistory()
 
-        with PETSc.Log.Stage("warm_solve"):
+        with PETSc.Log.Stage("linear_solve"):
             solver.solve()
             if not self.suppress_data_output:
                 self.extract_ksp_info(solver)
@@ -81,7 +97,7 @@ class Profiler(GCN):
         logger.info("Profiling one time-step.")
         state = self.state
         state.xnp1.assign(state.xn)
-        self.implicit_step()
+        self.semi_implicit_step()
         state.xb.assign(state.xn)
         state.xn.assign(state.xnp1)
         logger.info("Profile complete for  one time-step.")
