@@ -212,7 +212,7 @@ vertical CFL: %s.
     # p_expr = ps*(1 + G/Ts*(rand_expr-1))**(1.0/kappa)
     p = Function(W_Q1).interpolate(p_expr)
 
-    noise = p_eq
+    noise = 1.e-4
     p.dat.data[:] += noise*np.random.rand(len(ps.dat.data))
 
     # Background temperature
@@ -224,11 +224,11 @@ vertical CFL: %s.
     thetab = Function(W_Q1).interpolate(thetab_expr)
     theta_b = Function(theta0.function_space()).interpolate(thetab)
     rho_b = Function(rho0.function_space())
-    # sin_tmp = sin(lat) * sin(phi_c)
-    # cos_tmp = cos(lat) * cos(phi_c)
-    # r = a*acos(sin_tmp + cos_tmp*cos(lon-lamda_c))
-    # s = (d**2)/(d**2 + r**2)
-    # theta_pert = deltaTheta*s*sin(2*np.pi*z/L_z)
+    sin_tmp = sin(lat) * sin(phi_c)
+    cos_tmp = cos(lat) * cos(phi_c)
+    r = a*acos(sin_tmp + cos_tmp*cos(lon-lamda_c))
+    s = (d**2)/(d**2 + r**2)
+    theta_pert = deltaTheta*s*sin(2*np.pi*z/L_z)
     theta0.assign(0.0)
 
     # Compute the balanced density
