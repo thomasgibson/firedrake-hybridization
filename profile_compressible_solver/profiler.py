@@ -75,6 +75,8 @@ class Profiler(GCN):
 
         state.xrhs -= state.xnp1
 
+        logger.info("||b|| = %s" % state.xrhs.dat.norm)
+
         logger.info("Finished forcing. Profiling linear solver.")
 
         if self.hybridization:
