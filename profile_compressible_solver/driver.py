@@ -1,5 +1,5 @@
 from gusto import *
-from firedrake import (CubedSphereMesh, ExtrudedMesh,
+from firedrake import (CubedSphereMesh, ExtrudedMesh, IcosahedralSphereMesh,
                        FunctionSpace, Function,
                        SpatialCoordinate, as_vector, interpolate,
                        CellVolume, exp, acos, cos, sin,
@@ -56,12 +56,18 @@ def run_profliler(args, suppress_data_output=False):
     gamma = (1 - kappa) / kappa
     cs = sqrt(c_p * T_eq / gamma)   # Speed of sound of an air parcel
 
-    # Cubed-sphere mesh
-    m = CubedSphereMesh(radius=a,
-                        refinement_level=refinements,
-                        degree=args.mesh_degree)
+    if args.family == "RTCF":
+        # Cubed-sphere mesh
+        m = CubedSphereMesh(radius=a,
+                            refinement_level=refinements,
+                            degree=args.mesh_degree)
+    elif args.family == "RT":
+        m = IcosahedralSphereMesh(radius=a,
+                                  refinement_level=refinements,
+                                  degree=args.mesh_degree)
+    else:
+        raise ValueError("Unknown family: %s" % args.family)
 
-    # Horizontal Courant (advective) number
     cell_vs = interpolate(CellVolume(m),
                           FunctionSpace(m, "DG", 0))
 
@@ -121,7 +127,7 @@ vertical CFL: %s.
 
     # Create polar coordinates:
     # Since we use a CG1 field, this is constant on layers
-    W_Q1 = FunctionSpace(mesh, "Q", 1)
+    W_Q1 = FunctionSpace(mesh, "CG", 1)
     z_expr = sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]) - a
     z = Function(W_Q1).interpolate(z_expr)
     lat_expr = asin(x[2]/sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))

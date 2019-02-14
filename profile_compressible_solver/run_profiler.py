@@ -22,7 +22,7 @@ parser.add_argument("--model_degree",
 
 parser.add_argument("--model_family",
                     default="RTCF",
-                    choices=["RTCF"],
+                    choices=["RTCF", "RT"],
                     help="Family of finite element spaces")
 
 parser.add_argument("--mesh_degree",
