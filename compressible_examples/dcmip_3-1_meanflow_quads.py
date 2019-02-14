@@ -3,11 +3,21 @@ from firedrake import (CubedSphereMesh, ExtrudedMesh, Expression,
                        VectorFunctionSpace, FunctionSpace, Function,
                        SpatialCoordinate, as_vector, interpolate,
                        CellVolume, exp, acos, cos, sin, pi,
-                       sqrt, asin, atan_2)
+                       sqrt, asin, atan_2, op2)
 from firedrake.petsc import PETSc
 from argparse import ArgumentParser
 import numpy as np
 import sys
+
+
+def fmax(f):
+    fmax = op2.Global(1, np.finfo(float).min, dtype=float)
+    op2.par_loop(op2.Kernel("""
+void maxify(double *a, double *b) {
+    a[0] = a[0] < fabs(b[0]) ? fabs(b[0]) : a[0];
+}
+""", "maxify"), f.dof_dset.set, fmax(op2.MAX), f.dat(op2.READ))
+    return fmax.data[0]
 
 
 PETSc.Log.begin()
@@ -110,6 +120,8 @@ lamda_c = 2.0*np.pi/3.0         # Longitudinal centerpoint of Theta'
 phi_c = 0.0                     # Latitudinal centerpoint of Theta' (equator)
 deltaTheta = 1.0                # Maximum amplitude of Theta' (K)
 L_z = 20000.0                   # Vertical wave length of the Theta' perturb.
+gamma = (1 - kappa) / kappa
+cs = sqrt(c_p * T_eq / gamma)   # Speed of sound in an air parcel
 
 # Cubed-sphere mesh
 m = CubedSphereMesh(radius=a,
@@ -119,22 +131,18 @@ m = CubedSphereMesh(radius=a,
 # Horizontal Courant (advective) number
 cell_vs = interpolate(CellVolume(m),
                       FunctionSpace(m, "DG", 0))
-a_min = cell_vs.dat.data.min()
-a_max = cell_vs.dat.data.max()
-dx_min = sqrt(a_min)
+a_max = fmax(cell_vs)
 dx_max = sqrt(a_max)
-dx_avg = (dx_min + dx_max)/2.0
 u_max = u_0
-cs = 343.0
 
 if args.dt == 0.0:
     cfl = args.cfl
     PETSc.Sys.Print("Determining Dt from specified horizontal CFL: %s" % cfl)
     # Take integer value
-    dt = int(cfl * (dx_avg / cs))
+    dt = int(cfl * (dx_max / cs))
 else:
     dt = args.dt
-    cfl = dt * (cs / dx_avg)
+    cfl = dt * (cs / dx_max)
 
 if args.test:
     tmax = dt
