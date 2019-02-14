@@ -57,8 +57,8 @@ class Profiler(GCN):
 
         # Do some forcing and advection to get some crunchy data
         with timed_stage("Apply forcing terms"):
-            self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
-                               state.xrhs, implicit=False)
+            self.forcing.apply(alpha*dt, state.xn, state.xn,
+                               state.xrhs, implicit=True)
 
         logger.info("Finished forcing. Profiling linear solver.")
 
