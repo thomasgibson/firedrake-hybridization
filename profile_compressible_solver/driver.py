@@ -56,17 +56,17 @@ def run_profliler(args, suppress_data_output=False):
     gamma = (1 - kappa) / kappa
     cs = sqrt(c_p * T_eq / gamma)   # Speed of sound of an air parcel
 
-    if args.family == "RTCF":
+    if args.model_family == "RTCF":
         # Cubed-sphere mesh
         m = CubedSphereMesh(radius=a,
                             refinement_level=refinements,
                             degree=args.mesh_degree)
-    elif args.family == "RT":
+    elif args.model_family == "RT":
         m = IcosahedralSphereMesh(radius=a,
                                   refinement_level=refinements,
                                   degree=args.mesh_degree)
     else:
-        raise ValueError("Unknown family: %s" % args.family)
+        raise ValueError("Unknown family: %s" % args.model_family)
 
     cell_vs = interpolate(CellVolume(m),
                           FunctionSpace(m, "DG", 0))
