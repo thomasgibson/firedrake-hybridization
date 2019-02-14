@@ -170,9 +170,7 @@ vertical CFL: %s.
     x = SpatialCoordinate(mesh)
     # u max defined above
     uexpr = as_vector([-u_max*x[1]/a, u_max*x[0]/a, 0.0])
-    u0.project(uexpr, solver_parameters={'ksp_type': 'preonly',
-                                         'pc_type': 'lu',
-                                         'pc_factor_mat_solver_type': 'mumps'})
+    u0.project(uexpr)
 
     # Surface temperature
     G = g**2/(N**2*c_p)
