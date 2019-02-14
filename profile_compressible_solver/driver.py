@@ -321,7 +321,7 @@ Setting up hybridized solver on the traces.""")
             inner_solver_type = "gmres_ilu"
 
             inner_parameters = {
-                'ksp_type': 'gmres',
+                'ksp_type': 'gcr',
                 'ksp_rtol': args.rtol,
                 'ksp_atol': args.atol,
                 'ksp_max_it': 1000,
@@ -336,20 +336,19 @@ Setting up hybridized solver on the traces.""")
             )
 
             inner_parameters = {
-                'ksp_type': 'gmres',
+                'ksp_type': 'gcr',
                 'ksp_rtol': args.rtol,
                 'ksp_atol': args.atol,
                 'ksp_max_it': 100,
                 'pc_type': 'gamg',
                 'pc_gamg_sym_graph': None,
-                'pc_gamg_agg_nsmooths': 1,
-                'pc_gamg_threshold': 0.02,   # [0 - 0.1]
                 'mg_levels': {
-                    'ksp_type': 'richardson',
-                    'pc_type': 'jacobi',
-                    'ksp_richardson_scale': args.richardson_scale,
-                    'ksp_max_it': 8,
-                    'ksp_convergence_test': 'skip'
+                    'ksp_type': 'gmres',
+                    'pc_type': 'bjacobi',
+                    'sub_pc_type': 'ilu',
+                    # 'ksp_richardson_scale': args.richardson_scale,
+                    'ksp_max_it': 5,
+                    # 'ksp_convergence_test': 'skip'
                 }
             }
 
