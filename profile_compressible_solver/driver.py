@@ -212,8 +212,8 @@ vertical CFL: %s.
     # p_expr = ps*(1 + G/Ts*(rand_expr-1))**(1.0/kappa)
     p = Function(W_Q1).interpolate(p_expr)
 
-    noise = 1.e-4
-    p.dat.data[:] += noise*np.random.rand(len(ps.dat.data))
+    # noise = 1.e-4
+    # p.dat.data[:] += noise*np.random.rand(len(ps.dat.data))
 
     # Background temperature
     Tb_expr = G*(1 - exp(N**2*z/g)) + Ts*exp(N**2*z/g)
@@ -347,7 +347,8 @@ Setting up hybridized solver on the traces.""")
                     'ksp_richardson_scale': args.richardson_scale,
                     'ksp_max_it': 5,
                     'pc_type': 'bjacobi',
-                    'sub_pc_type': 'ilu'
+                    'sub_pc_type': 'sor',
+                    'sub_pc_sor_its': 3
                 }
             }
 
