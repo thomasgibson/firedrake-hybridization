@@ -64,7 +64,7 @@ def run_profliler(args, suppress_data_output=False):
     deltaTheta = 1.0                # Maximum amplitude of Theta' (K)
     L_z = 20000.0                   # Vert. wave length of the Theta' perturb.
     gamma = (1 - kappa) / kappa
-    cs = sqrt(c_p * T_eq / gamma)   # Speed of sound of an air parcel
+    cs = sqrt(c_p * T_eq / gamma)   # Speed of sound in an air parcel
 
     if args.model_family == "RTCF":
         # Cubed-sphere mesh
@@ -316,11 +316,11 @@ Setting up hybridized solver on the traces.""")
         else:
 
             inner_solver_type = (
-                "bcgs_amg_richardson_%s" % args.richardson_scale
+                "gmres_amg_richardson_%s" % args.richardson_scale
             )
 
             inner_parameters = {
-                'ksp_type': 'bcgs',
+                'ksp_type': 'gmres',
                 'ksp_rtol': args.rtol,
                 # 'ksp_atol': 1.e-8,
                 'ksp_max_it': 100,
@@ -329,6 +329,7 @@ Setting up hybridized solver on the traces.""")
                 'mg_levels': {
                     'ksp_type': 'richardson',
                     'ksp_richardson_scale': args.richardson_scale,
+                    'ksp_max_it': 5,
                     'pc_type': 'bjacobi',
                     'sub_pc_type': 'ilu'
                 }
@@ -340,6 +341,7 @@ Setting up hybridized solver on the traces.""")
         # Use Firedrake static condensation interface
         solver_parameters = {
             'mat_type': 'matfree',
+            'pmat_type': 'matfree',
             'ksp_type': 'preonly',
             'pc_type': 'python',
             'pc_python_type': 'firedrake.SCPC',
