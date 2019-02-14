@@ -279,7 +279,7 @@ Setting up hybridized solver on the traces.""")
             inner_parameters = {
                 'ksp_type': 'fgmres',
                 'ksp_rtol': args.rtol,
-                'ksp_atol': 1.0e-8,
+                # 'ksp_atol': 1.0e-8,
                 'ksp_max_it': 100,
                 'pc_type': 'gamg',
                 'pc_gamg_sym_graph': True,
@@ -297,7 +297,7 @@ Setting up hybridized solver on the traces.""")
             inner_parameters = {
                 'ksp_type': 'gmres',
                 'ksp_rtol': args.rtol,
-                'ksp_atol': 1.e-8,
+                # 'ksp_atol': 1.e-8,
                 'ksp_max_it': 1000,
                 'pc_type': 'bjacobi',
                 'sub_pc_type': 'ilu'
@@ -312,7 +312,7 @@ Setting up hybridized solver on the traces.""")
             inner_parameters = {
                 'ksp_type': 'bcgs',
                 'ksp_rtol': args.rtol,
-                'ksp_atol': 1.e-8,
+                # 'ksp_atol': 1.e-8,
                 'ksp_max_it': 100,
                 'pc_type': 'gamg',
                 'pc_gamg_sym_graph': True,
@@ -352,7 +352,7 @@ Setting up GMRES fieldsplit solver with Schur complement PC.""")
 
         # Aggressive AMG procedure
         mg_params = {
-            'ksp_type': 'richardson',
+            'ksp_type': 'gmres',
             'ksp_max_it': 5,
             'pc_type': 'bjacobi',
             'sub_pc_type': 'ilu'
@@ -361,7 +361,7 @@ Setting up GMRES fieldsplit solver with Schur complement PC.""")
         solver_parameters = {
             'pc_type': 'fieldsplit',
             'pc_fieldsplit_type': 'schur',
-            'ksp_type': 'gmres',
+            'ksp_type': 'fgmres',
             'ksp_rtol': args.rtol,
             'ksp_max_it': 100,
             'ksp_gmres_restart': 30,
@@ -373,7 +373,7 @@ Setting up GMRES fieldsplit solver with Schur complement PC.""")
                 'sub_pc_type': 'ilu'
             },
             'fieldsplit_1': {
-                'ksp_type': 'preonly',
+                'ksp_type': 'fgmres',
                 'pc_type': 'gamg',
                 'pc_gamg_sym_graph': True,
                 'mg_levels': mg_params
