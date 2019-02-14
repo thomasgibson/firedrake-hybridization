@@ -55,10 +55,25 @@ class Profiler(GCN):
         dt = state.timestepping.dt
         alpha = state.timestepping.alpha
 
-        # Do some forcing and advection to get some crunchy data
         with timed_stage("Apply forcing terms"):
-            self.forcing.apply(alpha*dt, state.xn, state.xn,
-                               state.xrhs, implicit=True)
+            self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
+                               state.xstar, implicit=False)
+
+        with timed_stage("Advection"):
+            for name, advection in self.active_advection:
+                # first computes ubar from state.xn and state.xnp1
+                advection.update_ubar(state.xn, state.xnp1, alpha)
+                # advects a field from xstar and puts result in xp
+                advection.apply(self.xstar_fields[name], self.xp_fields[name])
+
+        state.xrhs.assign(0.)
+
+        with timed_stage("Apply forcing terms"):
+            self.forcing.apply(alpha*dt, state.xp, state.xnp1,
+                               state.xrhs, implicit=True,
+                               incompressible=False)
+
+        state.xrhs -= state.xnp1
 
         logger.info("Finished forcing. Profiling linear solver.")
 
@@ -74,10 +89,6 @@ class Profiler(GCN):
             solver.solve()
             if not self.suppress_data_output:
                 self.extract_ksp_info(solver)
-
-        state.xnp1 += state.dy
-
-        self._apply_bcs()
 
     def run(self, t, tmax, pickup=False):
 
@@ -119,7 +130,7 @@ class Profiler(GCN):
             ksp = solver.snes.ksp
 
         if COMM_WORLD.rank == 0:
-            results = "profiling/"
+            results = "results/"
             if not os.path.exists(os.path.dirname(results)):
                 os.makedirs(os.path.dirname(results))
 
