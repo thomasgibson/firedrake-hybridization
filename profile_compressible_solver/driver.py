@@ -3,10 +3,11 @@ from firedrake import (CubedSphereMesh, ExtrudedMesh, IcosahedralSphereMesh,
                        FunctionSpace, Function,
                        SpatialCoordinate, as_vector, interpolate,
                        CellVolume, exp, acos, cos, sin,
-                       sqrt, asin, atan_2, op2)
+                       sqrt, asin, atan_2, op2, File)
 from firedrake.petsc import PETSc
 from collections import namedtuple
 from profiler import Profiler
+from gaussian import MultipleGaussians
 import numpy as np
 
 
@@ -25,6 +26,12 @@ ParameterInfo = namedtuple("ParameterInfo",
                             "mesh_degree",
                             "solver_type",
                             "inner_solver_type"])
+
+
+# Gaussian expression generator
+mgaussian = MultipleGaussians(n_gaussians=48,
+                              r_earth=6.37122e6,
+                              thickness=1.0e4)
 
 
 def fmax(f):
@@ -198,7 +205,9 @@ vertical CFL: %s.
     ps = Function(W_Q1).interpolate(ps_expr)
 
     # Background pressure
-    p_expr = ps*(1 + G/Ts*(exp(-N**2*z/g)-1))**(1.0/kappa)
+    # p_expr = ps*(1 + G/Ts*(exp(-N**2*z/g)-1))**(1.0/kappa)
+    rand_expr = mgaussian.expression(mesh)
+    p_expr = ps*(1 + G/Ts*(rand_expr-1))**(1.0/kappa)
     p = Function(W_Q1).interpolate(p_expr)
 
     # Background temperature
@@ -210,12 +219,12 @@ vertical CFL: %s.
     thetab = Function(W_Q1).interpolate(thetab_expr)
     theta_b = Function(theta0.function_space()).interpolate(thetab)
     rho_b = Function(rho0.function_space())
-    sin_tmp = sin(lat) * sin(phi_c)
-    cos_tmp = cos(lat) * cos(phi_c)
-    r = a*acos(sin_tmp + cos_tmp*cos(lon-lamda_c))
-    s = (d**2)/(d**2 + r**2)
-    theta_pert = deltaTheta*s*sin(2*np.pi*z/L_z)
-    theta0.interpolate(theta_b)
+    # sin_tmp = sin(lat) * sin(phi_c)
+    # cos_tmp = cos(lat) * cos(phi_c)
+    # r = a*acos(sin_tmp + cos_tmp*cos(lon-lamda_c))
+    # s = (d**2)/(d**2 + r**2)
+    # theta_pert = deltaTheta*s*sin(2*np.pi*z/L_z)
+    theta0.assign(0.0)
 
     # Compute the balanced density
     PETSc.Sys.Print("Computing balanced density field...\n")
@@ -251,9 +260,11 @@ vertical CFL: %s.
                                      solve_for_rho=False,
                                      params=pi_params)
 
-    theta0.interpolate(theta_pert)
-    theta0 += theta_b
+    # theta0.interpolate(theta_pert)
+    # theta0 += theta_b
     rho0.assign(rho_b)
+
+    File("vars.pvd").write(theta0, u0, rho0, p)
 
     state.initialise([('u', u0),
                       ('rho', rho0),
