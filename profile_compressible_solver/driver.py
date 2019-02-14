@@ -10,6 +10,8 @@ from profiler import Profiler
 from gaussian import MultipleGaussians
 import numpy as np
 
+np.random.seed(2097152)
+
 
 __all__ = ["run_profliler"]
 
@@ -28,10 +30,10 @@ ParameterInfo = namedtuple("ParameterInfo",
                             "inner_solver_type"])
 
 
-# Gaussian expression generator
-mgaussian = MultipleGaussians(n_gaussians=48,
-                              r_earth=6.37122e6,
-                              thickness=1.0e4)
+# # Gaussian expression generator
+# mgaussian = MultipleGaussians(n_gaussians=48,
+#                               r_earth=6.37122e6,
+#                               thickness=1.0e4)
 
 
 def fmax(f):
@@ -205,10 +207,13 @@ vertical CFL: %s.
     ps = Function(W_Q1).interpolate(ps_expr)
 
     # Background pressure
-    # p_expr = ps*(1 + G/Ts*(exp(-N**2*z/g)-1))**(1.0/kappa)
-    rand_expr = mgaussian.expression(mesh)
-    p_expr = ps*(1 + G/Ts*(rand_expr-1))**(1.0/kappa)
+    p_expr = ps*(1 + G/Ts*(exp(-N**2*z/g)-1))**(1.0/kappa)
+    # rand_expr = mgaussian.expression(mesh)
+    # p_expr = ps*(1 + G/Ts*(rand_expr-1))**(1.0/kappa)
     p = Function(W_Q1).interpolate(p_expr)
+
+    noise = p_eq
+    p.dat.data[:] += noise*np.random.rand(len(ps.dat.data))
 
     # Background temperature
     Tb_expr = G*(1 - exp(N**2*z/g)) + Ts*exp(N**2*z/g)
@@ -347,6 +352,7 @@ Setting up hybridized solver on the traces.""")
             }
 
         if args.debug:
+            PETSc.Sys.Print("""Debugging on.""")
             inner_parameters['ksp_monitor_true_residual'] = None
 
         # Use Firedrake static condensation interface
