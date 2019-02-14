@@ -69,7 +69,7 @@ class Profiler(GCN):
         if self.hybridization:
             solver = self.linear_solver.hybridized_solver
         else:
-            solver = self.lienar_solver.urho_solver
+            solver = self.linear_solver.urho_solver
 
         solver.snes.setConvergenceHistory()
         solver.snes.ksp.setConvergenceHistory()
