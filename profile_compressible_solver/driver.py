@@ -264,7 +264,7 @@ vertical CFL: %s.
     # theta0 += theta_b
     rho0.assign(rho_b)
 
-    File("vars.pvd").write(theta0, u0, rho0, p)
+    # File("vars.pvd").write(theta0, u0, rho0, p)
 
     state.initialise([('u', u0),
                       ('rho', rho0),
