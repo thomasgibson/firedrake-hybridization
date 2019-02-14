@@ -1,5 +1,5 @@
 from firedrake import (SpatialCoordinate, dot, cross, sqrt, atan_2,
-                       exp, as_vector, Constant, acos)
+                       exp, as_vector, Constant, acos, COMM_WORLD)
 import numpy as np
 
 
@@ -60,7 +60,6 @@ class MultipleGaussians(object):
         self._generate_random_vars()
 
     def _generate_random_vars(self):
-        np.random.rand(self._seed)
         ns = []
         rs = []
         for i in range(self._N):
@@ -70,7 +69,7 @@ class MultipleGaussians(object):
                 n = 2*np.random.rand(3) - 1.0
                 nrm = np.linalg.norm(n)
 
-            ns.append(as_vector(list(n)))
+            ns.append(as_vector([Constant(k) for k in n]))
             rs.append(Constant(self._R + self._H * np.random.rand()))
 
         self._random_Ns = ns
