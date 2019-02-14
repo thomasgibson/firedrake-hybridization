@@ -50,7 +50,7 @@ parser.add_argument("--refinements",
                     help="Resolution scaling parameter.")
 
 parser.add_argument("--richardson_scale",
-                    default=0.96,
+                    default=1.0,
                     type=float,
                     action="store",
                     help="Set the Richardson parameter for the trace system.")

@@ -341,16 +341,14 @@ Setting up hybridized solver on the traces.""")
                 'ksp_atol': args.atol,
                 'ksp_max_it': 100,
                 'pc_type': 'gamg',
-                'pc_gamg_sym_graph': True,
+                'pc_gamg_agg_nsmooths': 1,
+                'pc_gamg_threshold': 0.02,   # [0 - 0.1]
                 'mg_levels': {
                     'ksp_type': 'richardson',
                     'ksp_richardson_scale': args.richardson_scale,
-                    'ksp_max_it': 6,
+                    'ksp_max_it': 8,
                     'pc_type': 'bjacobi',
-                    'sub_pc_type': 'ilu',
-                    'sub_pc_factor_levels': 0,
-                    'sub_pc_factor_in_place': True,
-                    'sub_pc_factor_pivot_in_blocks': True
+                    'sub_pc_type': 'ilu'
                 }
             }
 
