@@ -3,7 +3,7 @@ from firedrake import (CubedSphereMesh, ExtrudedMesh, IcosahedralSphereMesh,
                        FunctionSpace, Function,
                        SpatialCoordinate, as_vector, interpolate,
                        CellVolume, exp, acos, cos, sin,
-                       sqrt, asin, atan_2)
+                       sqrt, asin, atan_2, op2)
 from firedrake.petsc import PETSc
 from collections import namedtuple
 from profiler import Profiler
@@ -25,6 +25,16 @@ ParameterInfo = namedtuple("ParameterInfo",
                             "mesh_degree",
                             "solver_type",
                             "inner_solver_type"])
+
+
+def fmax(f):
+    fmax = op2.Global(1, np.finfo(float).min, dtype=float)
+    op2.par_loop(op2.Kernel("""
+void maxify(double *a, double *b) {
+    a[0] = a[0] < fabs(b[0]) ? fabs(b[0]) : a[0];
+}
+""", "maxify"), f.dof_dset.set, fmax(op2.MAX), f.dat(op2.READ))
+    return fmax.data[0]
 
 
 def run_profliler(args, suppress_data_output=False):
@@ -71,7 +81,7 @@ def run_profliler(args, suppress_data_output=False):
     cell_vs = interpolate(CellVolume(m),
                           FunctionSpace(m, "DG", 0))
 
-    a_max = cell_vs.dat.data.max()
+    a_max = fmax(cell_vs)
     dx_max = sqrt(a_max)
     u_max = u_0
 
