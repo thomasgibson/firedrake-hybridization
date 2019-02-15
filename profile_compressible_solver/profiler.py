@@ -41,8 +41,11 @@ class Profiler(GCN):
         else:
             self.hybridization = False
 
-        tag = "profile_dx%s_dz%s" % (int(parameterinfo.deltax),
-                                     int(parameterinfo.deltaz))
+        tag = "%s%s_dx%skm_dz%sm_cfl%s" % (parameterinfo.family,
+                                           parameterinfo.model_degree,
+                                           int(parameterinfo.deltax/1000),
+                                           int(parameterinfo.deltaz),
+                                           parameterinfo.horizontal_courant)
 
         self.tag = tag
         self._warm_run = False
@@ -59,17 +62,22 @@ class Profiler(GCN):
             self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
                                state.xrhs, implicit=False)
 
-        logger.info("||b|| = %s" % state.xrhs.dat.norm)
-
-        logger.info("Finished forcing. Profiling linear solver.")
+        logger.info("Finished forcing. Warming up linear solver.")
 
         if self.hybridization:
             solver = self.linear_solver.hybridized_solver
         else:
             solver = self.linear_solver.urho_solver
 
+        with PETSc.Log.Stage("Warm-up stage"):
+            solver.solve()
+            state.dy.assign(0.0)
+            solver._problem.u.assign(0.0)
+
         solver.snes.setConvergenceHistory()
         solver.snes.ksp.setConvergenceHistory()
+
+        logger.info("Warm up finished. Timing linear solver.")
 
         with PETSc.Log.Stage("linear_solve"):
             solver.solve()
@@ -106,6 +114,24 @@ class Profiler(GCN):
         jac_time = comm.allreduce(jac_eval["time"], op=MPI.SUM) / comm.size
         res_time = comm.allreduce(residual["time"], op=MPI.SUM) / comm.size
 
+        # Hybridization-related timings
+        sc_init = PETSc.Log.Event("SCPCInit").getPerfInfo()
+        sc_update = PETSc.Log.Event("SCPCUpdate").getPerfInfo()
+        forward_elim = PETSc.Log.Event("SCForwardElim").getPerfInfo()
+        sc_solve = PETSc.Log.Event("SCSolve").getPerfInfo()
+        back_sub = PETSc.Log.Event("SCBackSub").getPerfInfo()
+
+        sc_init_time = comm.allreduce(sc_init["time"],
+                                      op=MPI.SUM) / comm.size
+        sc_update_time = comm.allreduce(sc_update["time"],
+                                        op=MPI.SUM) / comm.size
+        forward_elim_time = comm.allreduce(forward_elim["time"],
+                                           op=MPI.SUM) / comm.size
+        sc_solve_time = comm.allreduce(sc_solve["time"],
+                                       op=MPI.SUM) / comm.size
+        back_sub_time = comm.allreduce(back_sub["time"],
+                                       op=MPI.SUM) / comm.size
+
         num_cells = comm.allreduce(x.function_space().mesh().cell_set.size,
                                    op=MPI.SUM)
         total_dofs = x.dof_dset.layout_vec.getSize()
@@ -140,7 +166,13 @@ class Profiler(GCN):
                 "vertical_courant": self.parameter_info.vertical_courant,
                 "model_family": self.parameter_info.family,
                 "model_degree": self.parameter_info.model_degree,
-                "mesh_degree": self.parameter_info.mesh_degree
+                "mesh_degree": self.parameter_info.mesh_degree,
+                # hybridization-related times
+                "scpc_init": sc_init_time,
+                "scpc_update": sc_update_time,
+                "forward_elim": forward_elim_time,
+                "sc_solve": sc_solve_time,
+                "back_sub": back_sub_time
             }
 
             df = pd.DataFrame(data, index=[0])

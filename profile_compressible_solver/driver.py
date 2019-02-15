@@ -265,11 +265,9 @@ vertical CFL: %s.
                                      solve_for_rho=False,
                                      params=pi_params)
 
-    # theta0.interpolate(theta_pert)
-    # theta0 += theta_b
+    theta0.interpolate(theta_pert)
+    theta0 += theta_b
     rho0.assign(rho_b)
-
-    # File("vars.pvd").write(theta0, u0, rho0, p)
 
     state.initialise([('u', u0),
                       ('rho', rho0),
@@ -295,6 +293,13 @@ vertical CFL: %s.
 
         outer_solver_type = "Hybrid_SCPC"
 
+        mg_params = {
+            'ksp_type': 'gmres',
+            'ksp_max_it': 5,
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu'
+        }
+
         PETSc.Sys.Print("""
 Setting up hybridized solver on the traces.""")
 
@@ -307,49 +312,39 @@ Setting up hybridized solver on the traces.""")
                 'ksp_rtol': args.rtol,
                 'ksp_atol': args.atol,
                 'ksp_max_it': 100,
+                'ksp_gmres_restart': 30,
                 'pc_type': 'gamg',
                 'pc_gamg_sym_graph': None,
-                'mg_levels': {
-                    'ksp_type': 'gmres',
-                    'ksp_max_it': 5,
-                    'pc_type': 'bjacobi',
-                    'sub_pc_type': 'ilu'
-                }
+                'mg_levels': mg_params
             }
+
         elif args.gmres_ilu_only:
 
             inner_solver_type = "gmres_ilu"
 
             inner_parameters = {
-                'ksp_type': 'gcr',
+                'ksp_type': 'gmres',
                 'ksp_rtol': args.rtol,
                 'ksp_atol': args.atol,
-                'ksp_max_it': 1000,
+                'ksp_max_it': 100,
+                'ksp_gmres_restart': 30,
                 'pc_type': 'bjacobi',
                 'sub_pc_type': 'ilu'
             }
 
         else:
 
-            inner_solver_type = (
-                "gmres_amg_richardson_%s" % args.richardson_scale
-            )
+            inner_solver_type = "gcr_amg"
 
             inner_parameters = {
                 'ksp_type': 'gcr',
                 'ksp_rtol': args.rtol,
                 'ksp_atol': args.atol,
                 'ksp_max_it': 100,
+                'ksp_gcr_restart': 30,
                 'pc_type': 'gamg',
                 'pc_gamg_sym_graph': None,
-                'mg_levels': {
-                    'ksp_type': 'gmres',
-                    'pc_type': 'bjacobi',
-                    'sub_pc_type': 'ilu',
-                    # 'ksp_richardson_scale': args.richardson_scale,
-                    'ksp_max_it': 5,
-                    # 'ksp_convergence_test': 'skip'
-                }
+                'mg_levels': mg_params
             }
 
         if args.debug:
@@ -375,10 +370,10 @@ Setting up hybridized solver on the traces.""")
 
     else:
 
-        outer_solver_type = "GMRES_SchurPC"
+        outer_solver_type = "GCR_SchurPC"
 
         PETSc.Sys.Print("""
-Setting up GMRES fieldsplit solver with Schur complement PC.""")
+Setting up GCR fieldsplit solver with Schur complement PC.""")
 
         # Aggressive AMG procedure
         mg_params = {
@@ -391,11 +386,11 @@ Setting up GMRES fieldsplit solver with Schur complement PC.""")
         solver_parameters = {
             'pc_type': 'fieldsplit',
             'pc_fieldsplit_type': 'schur',
-            'ksp_type': 'fgmres',
+            'ksp_type': 'gcr',
             'ksp_rtol': args.rtol,
             'ksp_atol': args.atol,
             'ksp_max_it': 100,
-            'ksp_gmres_restart': 30,
+            'ksp_gcr_restart': 30,
             'pc_fieldsplit_schur_fact_type': 'FULL',
             'pc_fieldsplit_schur_precondition': 'selfp',
             'fieldsplit_0': {
@@ -411,7 +406,7 @@ Setting up GMRES fieldsplit solver with Schur complement PC.""")
             }
         }
 
-        inner_solver_type = "amg_richardson"
+        inner_solver_type = "fgmres_amg"
 
         if args.debug:
             solver_parameters['ksp_monitor_true_residual'] = None
