@@ -302,7 +302,6 @@ Setting up hybridized solver on the traces.""")
 
             inner_parameters = {
                 'ksp_type': 'fgmres',
-                'ksp_norm_type': 'unpreconditioned',
                 'ksp_rtol': args.rtol,
                 'ksp_atol': args.atol,
                 'ksp_max_it': 100,
@@ -314,9 +313,7 @@ Setting up hybridized solver on the traces.""")
                     'ksp_type': 'gmres',
                     'pc_type': 'bjacobi',
                     'sub_pc_type': 'ilu',
-                    'sub_pc_factor_levels': 1,
-                    'sub_ksp_type': 'preonly',
-                    'ksp_max_it': 3
+                    'ksp_max_it': 2
                 }
             }
 
@@ -340,11 +337,10 @@ Setting up hybridized solver on the traces.""")
 
             inner_parameters = {
                 'ksp_type': 'gmres',
-                'ksp_norm_type': 'unpreconditioned',
                 'ksp_rtol': args.rtol,
                 'ksp_atol': args.atol,
                 'ksp_max_it': 100,
-                'ksp_gcr_restart': 30,
+                'ksp_gmres_restart': 30,
                 'pc_type': 'gamg',
                 'pc_mg_cycles': 'v',
                 'pc_gamg_sym_graph': None,
@@ -352,9 +348,8 @@ Setting up hybridized solver on the traces.""")
                     'ksp_type': 'richardson',
                     'pc_type': 'bjacobi',
                     'sub_pc_type': 'ilu',
-                    'sub_pc_factor_levels': 1,
                     'sub_ksp_type': 'preonly',
-                    'ksp_max_it': 3
+                    'ksp_max_it': 5
                 }
             }
 
