@@ -295,7 +295,7 @@ vertical CFL: %s.
 
         mg_params = {
             'ksp_type': 'gmres',
-            'ksp_max_it': 5,
+            'ksp_max_it': 2,
             'pc_type': 'bjacobi',
             'sub_pc_type': 'ilu'
         }
@@ -314,6 +314,8 @@ Setting up hybridized solver on the traces.""")
                 'ksp_max_it': 100,
                 'ksp_gmres_restart': 30,
                 'pc_type': 'gamg',
+                'pc_mg_cycles': 'v',
+                'pc_gamg_reuse_interpolation': None,
                 'pc_gamg_sym_graph': None,
                 'mg_levels': mg_params
             }
@@ -343,6 +345,8 @@ Setting up hybridized solver on the traces.""")
                 'ksp_max_it': 100,
                 'ksp_gcr_restart': 30,
                 'pc_type': 'gamg',
+                'pc_mg_cycles': 'v',
+                'pc_gamg_reuse_interpolation': None,
                 'pc_gamg_sym_graph': None,
                 'mg_levels': mg_params
             }
