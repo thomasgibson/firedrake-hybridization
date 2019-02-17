@@ -302,6 +302,7 @@ Setting up hybridized solver on the traces.""")
 
             inner_parameters = {
                 'ksp_type': 'fgmres',
+                'ksp_norm_type': 'unpreconditioned',
                 'ksp_rtol': args.rtol,
                 'ksp_atol': args.atol,
                 'ksp_max_it': 100,
@@ -339,6 +340,7 @@ Setting up hybridized solver on the traces.""")
 
             inner_parameters = {
                 'ksp_type': 'gmres',
+                'ksp_norm_type': 'unpreconditioned',
                 'ksp_rtol': args.rtol,
                 'ksp_atol': args.atol,
                 'ksp_max_it': 100,
