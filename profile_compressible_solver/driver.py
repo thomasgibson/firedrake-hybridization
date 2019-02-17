@@ -293,13 +293,6 @@ vertical CFL: %s.
 
         outer_solver_type = "Hybrid_SCPC"
 
-        mg_params = {
-            'ksp_type': 'gmres',
-            'ksp_max_it': 2,
-            'pc_type': 'bjacobi',
-            'sub_pc_type': 'ilu'
-        }
-
         PETSc.Sys.Print("""
 Setting up hybridized solver on the traces.""")
 
@@ -315,9 +308,15 @@ Setting up hybridized solver on the traces.""")
                 'ksp_gmres_restart': 30,
                 'pc_type': 'gamg',
                 'pc_mg_cycles': 'v',
-                'pc_gamg_reuse_interpolation': None,
                 'pc_gamg_sym_graph': None,
-                'mg_levels': mg_params
+                'mg_levels': {
+                    'ksp_type': 'gmres',
+                    'pc_type': 'bjacobi',
+                    'sub_pc_type': 'ilu',
+                    'sub_pc_factor_levels': 1,
+                    'sub_ksp_type': 'preonly',
+                    'ksp_max_it': 3
+                }
             }
 
         elif args.gmres_ilu_only:
@@ -336,19 +335,25 @@ Setting up hybridized solver on the traces.""")
 
         else:
 
-            inner_solver_type = "gcr_amg"
+            inner_solver_type = "amg_richardson"
 
             inner_parameters = {
-                'ksp_type': 'gcr',
+                'ksp_type': 'gmres',
                 'ksp_rtol': args.rtol,
                 'ksp_atol': args.atol,
                 'ksp_max_it': 100,
                 'ksp_gcr_restart': 30,
                 'pc_type': 'gamg',
                 'pc_mg_cycles': 'v',
-                'pc_gamg_reuse_interpolation': None,
                 'pc_gamg_sym_graph': None,
-                'mg_levels': mg_params
+                'mg_levels': {
+                    'ksp_type': 'richardson',
+                    'pc_type': 'bjacobi',
+                    'sub_pc_type': 'ilu',
+                    'sub_pc_factor_levels': 1,
+                    'sub_ksp_type': 'preonly',
+                    'ksp_max_it': 3
+                }
             }
 
         if args.debug:
