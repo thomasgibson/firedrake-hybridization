@@ -37,12 +37,6 @@ parser.add_argument("--cfl",
                     action="store",
                     help="CFL number to run at (determines dt).")
 
-parser.add_argument("--dt",
-                    default=0.0,
-                    type=float,
-                    action="store",
-                    help="Manually set dt")
-
 parser.add_argument("--refinements",
                     default=4,
                     type=int,
