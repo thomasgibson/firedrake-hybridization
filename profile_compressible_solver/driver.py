@@ -94,14 +94,9 @@ def run_profliler(args, suppress_data_output=False):
     dx_max = sqrt(a_max)
     u_max = u_0
 
-    if args.dt == 0.0:
-        cfl = args.cfl
-        PETSc.Sys.Print("Determining Dt from specified horizontal CFL: %s" % cfl)
-        dt = cfl * (dx_max / cs)
-
-    else:
-        dt = args.dt
-        cfl = dt * (cs / dx_max)
+    cfl = args.cfl
+    PETSc.Sys.Print("\nDetermining Dt from specified horizontal CFL: %s" % cfl)
+    dt = int(cfl * (dx_max / cs))
 
     # Height position of the model top (m)
     z_top = 1.0e4
@@ -197,6 +192,9 @@ vertical CFL: %s.
     uexpr = as_vector([-u_max*x[1]/a, u_max*x[0]/a, 0.0])
     u0.project(uexpr)
 
+    # Make u0 extra crunchy
+    u0.dat.data[:] += 1000*np.random.randn(len(u0.dat.data))
+
     # Surface temperature
     G = g**2/(N**2*c_p)
     Ts_expr = G + (T_eq-G)*exp(-(u_max*N**2/(4*g*g))*u_max*(cos(2.0*lat)-1.0))
@@ -208,12 +206,7 @@ vertical CFL: %s.
 
     # Background pressure
     p_expr = ps*(1 + G/Ts*(exp(-N**2*z/g)-1))**(1.0/kappa)
-    # rand_expr = mgaussian.expression(mesh)
-    # p_expr = ps*(1 + G/Ts*(rand_expr-1))**(1.0/kappa)
     p = Function(W_Q1).interpolate(p_expr)
-
-    # noise = 1.e-4
-    # p.dat.data[:] += noise*np.random.rand(len(ps.dat.data))
 
     # Background temperature
     Tb_expr = G*(1 - exp(N**2*z/g)) + Ts*exp(N**2*z/g)
@@ -268,6 +261,8 @@ vertical CFL: %s.
     theta0.interpolate(theta_pert)
     theta0 += theta_b
     rho0.assign(rho_b)
+    # Make rho0 extra crunchy
+    rho0.dat.data[:] += 1000*np.random.randn(len(rho0.dat.data))
 
     state.initialise([('u', u0),
                       ('rho', rho0),
@@ -302,6 +297,7 @@ Setting up hybridized solver on the traces.""")
 
             inner_parameters = {
                 'ksp_type': 'fgmres',
+                'ksp_norm_type': 'unpreconditioned',
                 'ksp_rtol': args.rtol,
                 'ksp_atol': args.atol,
                 'ksp_max_it': 100,
@@ -313,7 +309,7 @@ Setting up hybridized solver on the traces.""")
                     'ksp_type': 'gmres',
                     'pc_type': 'bjacobi',
                     'sub_pc_type': 'ilu',
-                    'ksp_max_it': 2
+                    'ksp_max_it': 5
                 }
             }
 
@@ -333,24 +329,28 @@ Setting up hybridized solver on the traces.""")
 
         else:
 
-            inner_solver_type = "amg_richardson"
+            inner_solver_type = "amg_hypre"
 
             inner_parameters = {
-                'ksp_type': 'gmres',
                 'ksp_rtol': args.rtol,
                 'ksp_atol': args.atol,
                 'ksp_max_it': 100,
                 'ksp_gmres_restart': 30,
-                'pc_type': 'gamg',
-                'pc_mg_cycles': 'v',
-                'pc_gamg_sym_graph': None,
-                'mg_levels': {
-                    'ksp_type': 'richardson',
-                    'pc_type': 'bjacobi',
-                    'sub_pc_type': 'ilu',
-                    'sub_ksp_type': 'preonly',
-                    'ksp_max_it': 5
-                }
+                'ksp_norm_type': 'unpreconditioned',
+                'ksp_type': 'fgmres',
+                'pc_type': 'hypre',
+                'pc_hypre_type': 'boomeramg',
+                'pc_hypre_boomeramg_max_iter': 1,
+                'pc_hypre_boomeramg_agg_nl': 0,
+                'pc_hypre_boomeramg_coarsen_type': 'Falgout',
+                'pc_hypre_boomeramg_smooth_type': 'Euclid',
+                'pc_hypre_boomeramg_eu_bj': 1,
+                'pc_hypre_boomeramg_interptype': 'classical',
+                'pc_hypre_boomeramg_P_max': 0,
+                'pc_hypre_boomeramg_agg_nl': 0,
+                'pc_hypre_boomeramg_strong_threshold': 0.25,
+                'pc_hypre_boomeramg_max_levels': 10,
+                'pc_hypre_boomeramg_no_CF': False
             }
 
         if args.debug:
@@ -376,43 +376,45 @@ Setting up hybridized solver on the traces.""")
 
     else:
 
-        outer_solver_type = "GCR_SchurPC"
+        outer_solver_type = "gmres_SchurPC"
 
         PETSc.Sys.Print("""
 Setting up GCR fieldsplit solver with Schur complement PC.""")
 
-        # Aggressive AMG procedure
-        mg_params = {
-            'ksp_type': 'gmres',
-            'ksp_max_it': 5,
-            'pc_type': 'bjacobi',
-            'sub_pc_type': 'ilu'
-        }
-
         solver_parameters = {
-            'pc_type': 'fieldsplit',
-            'pc_fieldsplit_type': 'schur',
-            'ksp_type': 'gcr',
-            'ksp_rtol': args.rtol,
-            'ksp_atol': args.atol,
-            'ksp_max_it': 100,
-            'ksp_gcr_restart': 30,
-            'pc_fieldsplit_schur_fact_type': 'FULL',
-            'pc_fieldsplit_schur_precondition': 'selfp',
-            'fieldsplit_0': {
-                'ksp_type': 'preonly',
-                'pc_type': 'bjacobi',
-                'sub_pc_type': 'ilu'
-            },
-            'fieldsplit_1': {
+                'pc_type': 'fieldsplit',
+                'pc_fieldsplit_type': 'schur',
                 'ksp_type': 'fgmres',
-                'pc_type': 'gamg',
-                'pc_gamg_sym_graph': True,
-                'mg_levels': mg_params
+                'ksp_max_it': 100,
+                'ksp_rtol': args.rtol,
+                'pc_fieldsplit_schur_fact_type': 'FULL',
+                'pc_fieldsplit_schur_precondition': 'selfp',
+                'fieldsplit_0': {
+                    'ksp_type': 'preonly',
+                    'pc_type': 'bjacobi',
+                    'sub_pc_type': 'ilu'
+                },
+                'fieldsplit_1': {
+                    'ksp_type': 'preonly',
+                    'ksp_max_it': 30,
+                    'ksp_monitor_true_residual': None,
+                    'pc_type': 'hypre',
+                    'pc_hypre_type': 'boomeramg',
+                    'pc_hypre_boomeramg_max_iter': 1,
+                    'pc_hypre_boomeramg_agg_nl': 0,
+                    'pc_hypre_boomeramg_coarsen_type': 'Falgout',
+                    'pc_hypre_boomeramg_smooth_type': 'Euclid',
+                    'pc_hypre_boomeramg_eu_bj': 1,
+                    'pc_hypre_boomeramg_interptype': 'classical',
+                    'pc_hypre_boomeramg_P_max': 0,
+                    'pc_hypre_boomeramg_agg_nl': 0,
+                    'pc_hypre_boomeramg_strong_threshold': 0.25,
+                    'pc_hypre_boomeramg_max_levels': 25,
+                    'pc_hypre_boomeramg_no_CF': False
+                }
             }
-        }
 
-        inner_solver_type = "fgmres_amg"
+        inner_solver_type = "hypre"
 
         if args.debug:
             solver_parameters['ksp_monitor_true_residual'] = None
