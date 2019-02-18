@@ -329,28 +329,24 @@ Setting up hybridized solver on the traces.""")
 
         else:
 
-            inner_solver_type = "amg_hypre"
+            inner_solver_type = "amg_richardson"
 
             inner_parameters = {
+                'ksp_type': 'fgmres',
+                'ksp_norm_type': 'unpreconditioned',
                 'ksp_rtol': args.rtol,
                 'ksp_atol': args.atol,
                 'ksp_max_it': 100,
                 'ksp_gmres_restart': 30,
-                'ksp_norm_type': 'unpreconditioned',
-                'ksp_type': 'fgmres',
-                'pc_type': 'hypre',
-                'pc_hypre_type': 'boomeramg',
-                'pc_hypre_boomeramg_max_iter': 1,
-                'pc_hypre_boomeramg_agg_nl': 0,
-                'pc_hypre_boomeramg_coarsen_type': 'Falgout',
-                'pc_hypre_boomeramg_smooth_type': 'Euclid',
-                'pc_hypre_boomeramg_eu_bj': 1,
-                'pc_hypre_boomeramg_interptype': 'classical',
-                'pc_hypre_boomeramg_P_max': 0,
-                'pc_hypre_boomeramg_agg_nl': 0,
-                'pc_hypre_boomeramg_strong_threshold': 0.25,
-                'pc_hypre_boomeramg_max_levels': 10,
-                'pc_hypre_boomeramg_no_CF': False
+                'pc_type': 'gamg',
+                'pc_mg_cycles': 'v',
+                'pc_gamg_sym_graph': None,
+                'mg_levels': {
+                    'ksp_type': 'richardson',
+                    'pc_type': 'bjacobi',
+                    'sub_pc_type': 'ilu',
+                    'ksp_max_it': 5
+                }
             }
 
         if args.debug:
