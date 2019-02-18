@@ -54,24 +54,16 @@ class Profiler(GCN):
 
     def semi_implicit_step(self):
 
-        state = self.state
-        dt = state.timestepping.dt
-        alpha = state.timestepping.alpha
-
-        with timed_stage("Apply forcing terms"):
-            self.forcing.apply((1-alpha)*dt, state.xn, state.xn,
-                               state.xrhs, implicit=False)
-
-        logger.info("Finished forcing. Warming up linear solver.")
+        self.state.xrhs -= self.state.xn
 
         if self.hybridization:
             solver = self.linear_solver.hybridized_solver
         else:
             solver = self.linear_solver.urho_solver
 
+        logger.info("Warming up linear solver.")
         with PETSc.Log.Stage("Warm-up stage"):
             solver.solve()
-            state.dy.assign(0.0)
             solver._problem.u.assign(0.0)
 
         solver.snes.setConvergenceHistory()
@@ -87,11 +79,9 @@ class Profiler(GCN):
     def run(self, t, tmax, pickup=False):
 
         logger.info("Profiling one time-step.")
-        state = self.state
-        state.xnp1.assign(state.xn)
+
         self.semi_implicit_step()
-        state.xb.assign(state.xn)
-        state.xn.assign(state.xnp1)
+
         logger.info("Profile complete for  one time-step.")
 
     def extract_ksp_info(self, solver):
