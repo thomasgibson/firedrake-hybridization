@@ -307,7 +307,7 @@ Setting up hybridized solver on the traces.""")
                     'ksp_type': 'gmres',
                     'pc_type': 'bjacobi',
                     'sub_pc_type': 'ilu',
-                    'ksp_max_it': 3
+                    'ksp_max_it': 5
                 }
             }
 
