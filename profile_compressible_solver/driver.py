@@ -296,10 +296,10 @@ Setting up hybridized solver on the traces.""")
             inner_solver_type = "fgmres_amg"
 
             inner_parameters = {
-                'ksp_type': 'fmres',
+                'ksp_type': 'gcr',
                 'ksp_rtol': args.rtol,
                 'ksp_max_it': 100,
-                'ksp_gmres_restart': 30,
+                'ksp_gcr_restart': 30,
                 'pc_type': 'gamg',
                 'pc_mg_cycles': 'v',
                 'pc_gamg_sym_graph': None,
@@ -307,7 +307,7 @@ Setting up hybridized solver on the traces.""")
                     'ksp_type': 'gmres',
                     'pc_type': 'bjacobi',
                     'sub_pc_type': 'ilu',
-                    'ksp_max_it': 5
+                    'ksp_max_it': 3
                 }
             }
 
