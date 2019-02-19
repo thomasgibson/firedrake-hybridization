@@ -319,7 +319,7 @@ Setting up hybridized solver on the traces.""")
 
         else:
 
-            inner_solver_type = "ml_amg"
+            inner_solver_type = "fgmres_ml_richardson"
 
             inner_parameters = {
                 'ksp_type': 'fgmres',
@@ -330,7 +330,8 @@ Setting up hybridized solver on the traces.""")
                 'pc_mg_cycles': 1,
                 'pc_ml_maxNlevels': 20,
                 'mg_levels': {
-                    'ksp_type': 'gmres',
+                    'ksp_type': 'richardson',
+                    'ksp_richardson_scale': 0.5,
                     'pc_type': 'bjacobi',
                     'sub_pc_type': 'ilu',
                     'ksp_max_it': 3
