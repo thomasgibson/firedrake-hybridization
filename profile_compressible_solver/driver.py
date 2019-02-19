@@ -256,7 +256,7 @@ vertical CFL: %s.
     theta0 += theta_b
     rho0.assign(rho_b)
 
-    r_expr = G*(sin(np.pi*z)*cos(2*np.pi*z))
+    r_expr = (p_eq**2)*G*(sin(np.pi*z)*cos(2*np.pi*z))
     _rho0 = Function(rho0.function_space()).interpolate(r_expr)
     rho0 += _rho0
 
