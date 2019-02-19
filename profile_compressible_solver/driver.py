@@ -337,7 +337,6 @@ Setting up hybridized solver on the traces.""")
                 'ksp_gmres_restart': 30,
                 'pc_type': 'ml',
                 'pc_mg_cycles': 1,
-                'pc_ml_CoarsenScheme': 'METIS',
                 'pc_ml_maxNlevels': 25,
                 'mg_levels': {
                     'ksp_type': 'richardson',
