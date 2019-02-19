@@ -12,6 +12,9 @@ import numpy as np
 np.random.seed(2097152)
 
 
+PETSc.Log.begin()
+
+
 __all__ = ["run_profliler"]
 
 
