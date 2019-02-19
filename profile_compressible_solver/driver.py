@@ -1,7 +1,7 @@
 from gusto import *
 from firedrake import (CubedSphereMesh, ExtrudedMesh, IcosahedralSphereMesh,
-                       FunctionSpace, Function,
-                       SpatialCoordinate, as_vector, interpolate,
+                       FunctionSpace, Function, VectorFunctionSpace,
+                       SpatialCoordinate, interpolate,
                        CellVolume, exp, acos, cos, sin,
                        sqrt, asin, atan_2, op2)
 from firedrake.petsc import PETSc
@@ -44,7 +44,7 @@ void maxify(double *a, double *b) {
 
 def run_profliler(hybridization, model_degree, model_family, mesh_degree,
                   cfl, refinements, layers, debug, rtol,
-                  flexsolver=True, gmres_ilu_only=False,
+                  flexsolver=True, stronger_smoother=False,
                   suppress_data_output=False):
 
     nlayers = layers           # Number of vertical layers
@@ -185,7 +185,12 @@ vertical CFL: %s.
     Vr = rho0.function_space()
 
     x = SpatialCoordinate(mesh)
-    u0.assign(0.0)
+
+    # Random velocity field
+    CG2 = VectorFunctionSpace(mesh, "CG", 2)
+    urand = Function(CG2)
+    urand.dat.data[:] += np.random.randn(*urand.dat.data.shape)
+    u0.project(urand)
 
     # Surface temperature
     G = g**2/(N**2*c_p)
@@ -250,13 +255,13 @@ vertical CFL: %s.
                                      solve_for_rho=False,
                                      params=pi_params)
 
-    theta0.interpolate(theta_pert)
-    theta0 += theta_b
-    rho0.assign(rho_b)
+    # Random potential temperature perturbation
+    theta0.assign(0.0)
+    theta0.dat.data[:] += np.random.randn(len(theta0.dat.data))
 
-    r_expr = (p_eq**2)*G*(sin(np.pi*z)*cos(2*np.pi*z))
-    _rho0 = Function(rho0.function_space()).interpolate(r_expr)
-    rho0 += _rho0
+    # Random density field
+    rho0.assign(0.0)
+    rho0.dat.data[:] += np.random.randn(len(rho0.dat.data))
 
     state.initialise([('u', u0),
                       ('rho', rho0),
@@ -287,13 +292,13 @@ Setting up hybridized solver on the traces.""")
 
         if flexsolver:
 
-            inner_solver_type = "fgmres_amg"
+            inner_solver_type = "fgmres_gamg_gmres_smoother"
 
             inner_parameters = {
                 'ksp_type': 'fgmres',
                 'ksp_rtol': rtol,
                 'ksp_max_it': 500,
-                'ksp_gcr_restart': 30,
+                'ksp_gmres_restart': 30,
                 'pc_type': 'gamg',
                 'pc_gamg_sym_graph': None,
                 'mg_levels': {
@@ -302,19 +307,6 @@ Setting up hybridized solver on the traces.""")
                     'sub_pc_type': 'ilu',
                     'ksp_max_it': 3
                 }
-            }
-
-        elif gmres_ilu_only:
-
-            inner_solver_type = "gmres_ilu"
-
-            inner_parameters = {
-                'ksp_type': 'gmres',
-                'ksp_rtol': rtol,
-                'ksp_max_it': 500,
-                'ksp_gmres_restart': 30,
-                'pc_type': 'bjacobi',
-                'sub_pc_type': 'ilu'
             }
 
         else:
@@ -328,19 +320,25 @@ Setting up hybridized solver on the traces.""")
                 'ksp_gmres_restart': 30,
                 'pc_type': 'ml',
                 'pc_mg_cycles': 1,
-                'pc_ml_maxNlevels': 20,
+                'pc_ml_maxNlevels': 25,
                 'mg_levels': {
                     'ksp_type': 'richardson',
-                    'ksp_richardson_scale': 0.5,
+                    'ksp_richardson_scale': 0.8,
                     'pc_type': 'bjacobi',
                     'sub_pc_type': 'ilu',
-                    'ksp_max_it': 2
+                    'ksp_max_it': 3
                 }
             }
+
+        if stronger_smoother:
+            inner_parameters['mg_levels']['ksp_max_it'] = 5
+            inner_solver_type += "_stronger"
 
         if debug:
             PETSc.Sys.Print("""Debugging on.""")
             inner_parameters['ksp_monitor_true_residual'] = None
+
+        PETSc.Sys.Print("Inner solver: %s" % inner_solver_type)
 
         # Use Firedrake static condensation interface
         solver_parameters = {
@@ -434,44 +432,3 @@ Setting up GCR fieldsplit solver with Schur complement PC.""")
 
     PETSc.Sys.Print("Starting profiler...\n")
     profiler.run(t=0, tmax=dt)
-
-
-# # Run all methods
-# for cfl in [1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 26]:
-#     for discretization in [('RT', 0), ('RT', 1), ('RT', 2),
-#                            ('RTCF', 0), ('RTCF', 1), ('RTCF', 2),
-#                            ('BDFM', 1)]:
-#         model_family, model_degree = discretization
-
-#         if model_family == 'RTCF':
-#             refs = 5
-#         else:
-#             refs = 4
-
-#         # Run using fgmres + gamg
-#         run_profliler(hybridization=True,
-#                       model_degree=model_degree,
-#                       model_family=model_family,
-#                       mesh_degree=2,
-#                       cfl=cfl,
-#                       refinements=refs,
-#                       layers=64,
-#                       debug=False,
-#                       rtol=1.e-6,
-#                       flexsolver=True,
-#                       gmres_ilu_only=False,
-#                       suppress_data_output=False)
-
-#         # Run using fgmres + ml
-#         run_profliler(hybridization=True,
-#                       model_degree=model_degree,
-#                       model_family=model_family,
-#                       mesh_degree=2,
-#                       cfl=cfl,
-#                       refinements=refs,
-#                       layers=64,
-#                       debug=False,
-#                       rtol=1.e-6,
-#                       flexsolver=False,
-#                       gmres_ilu_only=False,
-#                       suppress_data_output=False)
