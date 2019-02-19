@@ -342,11 +342,7 @@ Setting up hybridized solver on the traces.""")
                     'ksp_type': 'richardson',
                     'pc_type': 'bjacobi',
                     'sub_pc_type': 'ilu',
-                    'ksp_max_it': 3
-                },
-                'mg_coarse': {
-                    'ksp_type': 'preonly',
-                    'pc_type': 'lu'
+                    'ksp_max_it': 5
                 }
             }
 
