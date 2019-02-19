@@ -339,7 +339,7 @@ Setting up hybridized solver on the traces.""")
                 'pc_mg_cycles': 1,
                 'pc_ml_maxNlevels': 25,
                 'mg_levels': {
-                    'ksp_type': 'richardson',
+                    'ksp_type': 'gmres',
                     'pc_type': 'bjacobi',
                     'sub_pc_type': 'ilu',
                     'ksp_max_it': 5
