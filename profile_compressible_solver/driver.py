@@ -304,6 +304,10 @@ Setting up hybridized solver on the traces.""")
                     'pc_type': 'bjacobi',
                     'sub_pc_type': 'ilu',
                     'ksp_max_it': 3
+                },
+                'mg_coarse': {
+                    'ksp_type': 'preonly',
+                    'pc_type': 'lu'
                 }
             }
 
@@ -323,22 +327,27 @@ Setting up hybridized solver on the traces.""")
 
         else:
 
-            inner_solver_type = "amg_richardson"
+            inner_solver_type = "ml_amg"
 
             inner_parameters = {
-                'ksp_type': 'gmres',
+                'ksp_type': 'fgmres',
+                'ksp_gmres_modifiedgramschmidt': None,
                 'ksp_rtol': args.rtol,
-                'ksp_atol': args.atol,
                 'ksp_max_it': 100,
                 'ksp_gmres_restart': 30,
-                'pc_type': 'gamg',
-                'pc_mg_cycles': 'v',
-                'pc_gamg_sym_graph': None,
+                'pc_type': 'ml',
+                'pc_mg_cycles': 1,
+                'pc_ml_CoarsenScheme': 'METIS',
+                'pc_ml_maxNlevels': 25,
                 'mg_levels': {
                     'ksp_type': 'richardson',
                     'pc_type': 'bjacobi',
                     'sub_pc_type': 'ilu',
-                    'ksp_max_it': 5
+                    'ksp_max_it': 3
+                },
+                'mg_coarse': {
+                    'ksp_type': 'preonly',
+                    'pc_type': 'lu'
                 }
             }
 
