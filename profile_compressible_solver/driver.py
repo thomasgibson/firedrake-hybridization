@@ -80,7 +80,7 @@ def run_profliler(args, suppress_data_output=False):
         m = CubedSphereMesh(radius=a,
                             refinement_level=refinements,
                             degree=args.mesh_degree)
-    elif args.model_family == "RT":
+    elif args.model_family == "RT" or args.model_family == "BDFM":
         m = IcosahedralSphereMesh(radius=a,
                                   refinement_level=refinements,
                                   degree=args.mesh_degree)
