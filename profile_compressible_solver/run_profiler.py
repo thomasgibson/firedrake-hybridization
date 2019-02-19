@@ -93,4 +93,15 @@ if args.help:
     sys.exit(1)
 
 
-run_profliler(args, suppress_data_output=args.suppress_data_output)
+run_profliler(hybridization=args.hybridization,
+              model_degree=args.model_degree,
+              model_family=args.model_family,
+              mesh_degree=args.mesh_degree,
+              cfl=args.cfl,
+              refinements=args.refinements,
+              layers=args.layers,
+              debug=args.debug,
+              rtol=args.rtol,
+              flexsolver=args.flexsolver,
+              gmres_ilu_only=args.gmres_ilu_only,
+              suppress_data_output=args.suppress_data_output)

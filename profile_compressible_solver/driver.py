@@ -7,7 +7,6 @@ from firedrake import (CubedSphereMesh, ExtrudedMesh, IcosahedralSphereMesh,
 from firedrake.petsc import PETSc
 from collections import namedtuple
 from profiler import Profiler
-# from gaussian import MultipleGaussians
 import numpy as np
 
 np.random.seed(2097152)
@@ -30,12 +29,6 @@ ParameterInfo = namedtuple("ParameterInfo",
                             "inner_solver_type"])
 
 
-# # Gaussian expression generator
-# mgaussian = MultipleGaussians(n_gaussians=48,
-#                               r_earth=6.37122e6,
-#                               thickness=1.0e4)
-
-
 def fmax(f):
     fmax = op2.Global(1, np.finfo(float).min, dtype=float)
     op2.par_loop(op2.Kernel("""
@@ -46,12 +39,15 @@ void maxify(double *a, double *b) {
     return fmax.data[0]
 
 
-def run_profliler(args, suppress_data_output=False):
+def run_profliler(hybridization, model_degree, model_family, mesh_degree,
+                  cfl, refinements, layers, debug, rtol,
+                  flexsolver=True, gmres_ilu_only=False,
+                  suppress_data_output=False):
 
-    nlayers = args.layers           # Number of vertical layers
-    refinements = args.refinements  # Number of horiz. cells = 20*(4^refinements)
+    nlayers = layers           # Number of vertical layers
+    refinements = refinements  # Number of horiz. cells = 20*(4^refinements)
 
-    hybrid = bool(args.hybridization)
+    hybrid = bool(hybridization)
 
     # Set up problem parameters
     parameters = CompressibleParameters()
@@ -75,17 +71,17 @@ def run_profliler(args, suppress_data_output=False):
     gamma = (1 - kappa) / kappa
     cs = sqrt(c_p * T_eq / gamma)   # Speed of sound in an air parcel
 
-    if args.model_family == "RTCF":
+    if model_family == "RTCF":
         # Cubed-sphere mesh
         m = CubedSphereMesh(radius=a,
                             refinement_level=refinements,
-                            degree=args.mesh_degree)
-    elif args.model_family == "RT" or args.model_family == "BDFM":
+                            degree=mesh_degree)
+    elif model_family == "RT" or model_family == "BDFM":
         m = IcosahedralSphereMesh(radius=a,
                                   refinement_level=refinements,
-                                  degree=args.mesh_degree)
+                                  degree=mesh_degree)
     else:
-        raise ValueError("Unknown family: %s" % args.model_family)
+        raise ValueError("Unknown family: %s" % model_family)
 
     cell_vs = interpolate(CellVolume(m),
                           FunctionSpace(m, "DG", 0))
@@ -94,7 +90,6 @@ def run_profliler(args, suppress_data_output=False):
     dx_max = sqrt(a_max)
     u_max = u_0
 
-    cfl = args.cfl
     PETSc.Sys.Print("\nDetermining Dt from specified horizontal CFL: %s" % cfl)
     dt = int(cfl * (dx_max / cs))
 
@@ -121,9 +116,9 @@ horizontal CFL: %s,\n
 vertical CFL: %s.
 """ % (cs,
        hybrid,
-       args.model_degree,
-       args.model_family,
-       args.mesh_degree,
+       model_degree,
+       model_family,
+       mesh_degree,
        refinements,
        nlayers,
        dx_max,
@@ -167,9 +162,9 @@ vertical CFL: %s.
     diagnostics = Diagnostics(*fieldlist)
 
     state = State(mesh,
-                  vertical_degree=args.model_degree,
-                  horizontal_degree=args.model_degree,
-                  family=args.model_family,
+                  vertical_degree=model_degree,
+                  horizontal_degree=model_degree,
+                  family=model_family,
                   timestepping=timestepping,
                   output=output,
                   parameters=parameters,
@@ -241,7 +236,7 @@ vertical CFL: %s.
             }
         }
     }
-    if args.debug:
+    if debug:
         pi_params['vert_hybridization']['ksp_monitor_true_residual'] = None
 
     compressible_hydrostatic_balance(state,
@@ -287,13 +282,13 @@ vertical CFL: %s.
         PETSc.Sys.Print("""
 Setting up hybridized solver on the traces.""")
 
-        if args.flexsolver:
+        if flexsolver:
 
             inner_solver_type = "fgmres_amg"
 
             inner_parameters = {
                 'ksp_type': 'fgmres',
-                'ksp_rtol': args.rtol,
+                'ksp_rtol': rtol,
                 'ksp_max_it': 100,
                 'ksp_gcr_restart': 30,
                 'pc_type': 'gamg',
@@ -310,14 +305,13 @@ Setting up hybridized solver on the traces.""")
                 }
             }
 
-        elif args.gmres_ilu_only:
+        elif gmres_ilu_only:
 
             inner_solver_type = "gmres_ilu"
 
             inner_parameters = {
                 'ksp_type': 'gmres',
-                'ksp_rtol': args.rtol,
-                'ksp_atol': args.atol,
+                'ksp_rtol': rtol,
                 'ksp_max_it': 100,
                 'ksp_gmres_restart': 30,
                 'pc_type': 'bjacobi',
@@ -330,7 +324,7 @@ Setting up hybridized solver on the traces.""")
 
             inner_parameters = {
                 'ksp_type': 'fgmres',
-                'ksp_rtol': args.rtol,
+                'ksp_rtol': rtol,
                 'ksp_max_it': 100,
                 'ksp_gmres_restart': 30,
                 'pc_type': 'ml',
@@ -348,7 +342,7 @@ Setting up hybridized solver on the traces.""")
                 }
             }
 
-        if args.debug:
+        if debug:
             PETSc.Sys.Print("""Debugging on.""")
             inner_parameters['ksp_monitor_true_residual'] = None
 
@@ -381,7 +375,7 @@ Setting up GCR fieldsplit solver with Schur complement PC.""")
                 'pc_fieldsplit_type': 'schur',
                 'ksp_type': 'fgmres',
                 'ksp_max_it': 100,
-                'ksp_rtol': args.rtol,
+                'ksp_rtol': rtol,
                 'pc_fieldsplit_schur_fact_type': 'FULL',
                 'pc_fieldsplit_schur_precondition': 'selfp',
                 'fieldsplit_0': {
@@ -411,7 +405,7 @@ Setting up GCR fieldsplit solver with Schur complement PC.""")
 
         inner_solver_type = "hypre"
 
-        if args.debug:
+        if debug:
             solver_parameters['ksp_monitor_true_residual'] = None
 
         linear_solver = CompressibleSolver(
@@ -428,9 +422,9 @@ Setting up GCR fieldsplit solver with Schur complement PC.""")
                                deltaz=deltaz,
                                horizontal_courant=cfl,
                                vertical_courant=vertical_cfl,
-                               family=args.model_family,
-                               model_degree=args.model_degree,
-                               mesh_degree=args.mesh_degree,
+                               family=model_family,
+                               model_degree=model_degree,
+                               mesh_degree=mesh_degree,
                                solver_type=outer_solver_type,
                                inner_solver_type=inner_solver_type)
 
