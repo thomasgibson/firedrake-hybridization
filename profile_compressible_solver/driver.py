@@ -189,11 +189,10 @@ vertical CFL: %s.
     # Initial conditions with u0
     x = SpatialCoordinate(mesh)
     # u max defined above
-    uexpr = as_vector([-u_max*x[1]/a, u_max*x[0]/a, 0.0])
+    uexpr = as_vector([-u_max*x[0]*(x[1]**2)/a*sin(2*np.pi*z)*cos(2*np.pi*z),
+                       u_max*(x[0]**2)*x[1]/a*sin(2*np.pi*z)*cos(2*np.pi*z),
+                       0.0])
     u0.project(uexpr)
-
-    # Make u0 extra crunchy
-    u0.dat.data[:] += 1000*np.random.randn(len(u0.dat.data))
 
     # Surface temperature
     G = g**2/(N**2*c_p)
@@ -223,46 +222,13 @@ vertical CFL: %s.
     s = (d**2)/(d**2 + r**2)
     theta_pert = deltaTheta*s*sin(2*np.pi*z/L_z)
     theta0.interpolate(theta_pert)
-
-    # Compute the balanced density
-    PETSc.Sys.Print("Computing balanced density field...\n")
-
-    # Use vert. hybridization preconditioner for initialization
-    pi_params = {
-        'ksp_type': 'preonly',
-        'pc_type': 'python',
-        'mat_type': 'matfree',
-        'pc_python_type': 'gusto.VerticalHybridizationPC',
-        'vert_hybridization': {
-            'ksp_type': 'gmres',
-            'pc_type': 'gamg',
-            'pc_gamg_sym_graph': True,
-            'ksp_rtol': 1e-12,
-            'ksp_atol': 1e-12,
-            'mg_levels': {
-                'ksp_type': 'richardson',
-                'ksp_max_it': 3,
-                'pc_type': 'bjacobi',
-                'sub_pc_type': 'ilu'
-            }
-        }
-    }
-    if args.debug:
-        pi_params['vert_hybridization']['ksp_monitor_true_residual'] = None
-
-    compressible_hydrostatic_balance(state,
-                                     theta_b,
-                                     rho_b,
-                                     top=False,
-                                     pi_boundary=(p/p_0)**kappa,
-                                     solve_for_rho=False,
-                                     params=pi_params)
-
-    theta0.interpolate(theta_pert)
     theta0 += theta_b
-    rho0.assign(rho_b)
+
+    _rho = Function(rho0.function_space())
+    r_expr = (p_eq**3)*G*(sin(np.pi*z)*cos(2*np.pi*z))
+    _rho.interpolate(r_expr)
     # Make rho0 extra crunchy
-    rho0.dat.data[:] += 1000*np.random.randn(len(rho0.dat.data))
+    rho0.assign(_rho)
 
     state.initialise([('u', u0),
                       ('rho', rho0),
