@@ -293,13 +293,13 @@ Setting up hybridized solver on the traces.""")
 
         if args.flexsolver:
 
-            inner_solver_type = "gcr_amg"
+            inner_solver_type = "fgmres_amg"
 
             inner_parameters = {
-                'ksp_type': 'gcr',
+                'ksp_type': 'fmres',
                 'ksp_rtol': args.rtol,
                 'ksp_max_it': 100,
-                'ksp_gcr_restart': 30,
+                'ksp_gmres_restart': 30,
                 'pc_type': 'gamg',
                 'pc_mg_cycles': 'v',
                 'pc_gamg_sym_graph': None,
