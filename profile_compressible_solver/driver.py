@@ -435,42 +435,42 @@ Setting up GCR fieldsplit solver with Schur complement PC.""")
     profiler.run(t=0, tmax=dt)
 
 
-# Run all methods
-for cfl in [1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 26]:
-    for discretization in [('RT', 0), ('RT', 1), ('RT', 2),
-                           ('RTCF', 0), ('RTCF', 1), ('RTCF', 2),
-                           ('BDFM', 1)]:
-        model_family, model_degree = discretization
+# # Run all methods
+# for cfl in [1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 26]:
+#     for discretization in [('RT', 0), ('RT', 1), ('RT', 2),
+#                            ('RTCF', 0), ('RTCF', 1), ('RTCF', 2),
+#                            ('BDFM', 1)]:
+#         model_family, model_degree = discretization
 
-        if model_family == 'RTCF':
-            refs = 5
-        else:
-            refs = 4
+#         if model_family == 'RTCF':
+#             refs = 5
+#         else:
+#             refs = 4
 
-        # Run using fgmres + gamg
-        run_profliler(hybridization=True,
-                      model_degree=model_degree,
-                      model_family=model_family,
-                      mesh_degree=2,
-                      cfl=cfl,
-                      refinements=refs,
-                      layers=64,
-                      debug=False,
-                      rtol=1.e-6,
-                      flexsolver=True,
-                      gmres_ilu_only=False,
-                      suppress_data_output=False)
+#         # Run using fgmres + gamg
+#         run_profliler(hybridization=True,
+#                       model_degree=model_degree,
+#                       model_family=model_family,
+#                       mesh_degree=2,
+#                       cfl=cfl,
+#                       refinements=refs,
+#                       layers=64,
+#                       debug=False,
+#                       rtol=1.e-6,
+#                       flexsolver=True,
+#                       gmres_ilu_only=False,
+#                       suppress_data_output=False)
 
-        # Run using fgmres + ml
-        run_profliler(hybridization=True,
-                      model_degree=model_degree,
-                      model_family=model_family,
-                      mesh_degree=2,
-                      cfl=cfl,
-                      refinements=refs,
-                      layers=64,
-                      debug=False,
-                      rtol=1.e-6,
-                      flexsolver=False,
-                      gmres_ilu_only=False,
-                      suppress_data_output=False)
+#         # Run using fgmres + ml
+#         run_profliler(hybridization=True,
+#                       model_degree=model_degree,
+#                       model_family=model_family,
+#                       mesh_degree=2,
+#                       cfl=cfl,
+#                       refinements=refs,
+#                       layers=64,
+#                       debug=False,
+#                       rtol=1.e-6,
+#                       flexsolver=False,
+#                       gmres_ilu_only=False,
+#                       suppress_data_output=False)
