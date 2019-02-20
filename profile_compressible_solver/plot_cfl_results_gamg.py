@@ -189,6 +189,11 @@ xlabel = fig.text(0.5, -0.15,
                   ha='center',
                   fontsize=FONTSIZE)
 
+title = fig.text(0.5, 0.9,
+                 "Solver convergence for the trace system",
+                 ha='center',
+                 fontsize=FONTSIZE)
+
 handles, labels = ax.get_legend_handles_labels()
 legend = fig.legend(handles, labels,
                     loc=9,
@@ -205,4 +210,4 @@ fig.savefig("cfl_vs_iter_gamg.pdf",
             format="pdf",
             transparent=True,
             bbox_inches="tight",
-            bbox_extra_artists=[xlabel, legend])
+            bbox_extra_artists=[xlabel, legend, title])
