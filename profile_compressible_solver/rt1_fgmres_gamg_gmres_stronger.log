@@ -1,0 +1,436 @@
+
+Determining Dt from specified horizontal CFL: 1
+
+Problem parameters:
+
+Profiling linear solver for the compressible Euler equations.
+
+Speed of sound in compressible atmosphere: 347.18870949384285,
+
+Hybridized compressible solver: True,
+
+Model degree: 1,
+
+Model discretization: RT,
+
+Mesh degree: 3,
+
+Horizontal refinements: 4,
+
+Vertical layers: 64,
+
+Dx (max, m): 346563.4999224701,
+
+Dz (m): 156.25,
+
+Dt (s): 998,
+
+horizontal CFL: 1,
+
+vertical CFL: 2217.563725279073.
+
+Computing balanced density field...
+
+
+Setting up hybridized solver on the traces.
+Inner solver: fgmres_gamg_gmres_smoother_stronger
+Starting profiler...
+
+
+Determining Dt from specified horizontal CFL: 2
+
+Problem parameters:
+
+Profiling linear solver for the compressible Euler equations.
+
+Speed of sound in compressible atmosphere: 347.18870949384285,
+
+Hybridized compressible solver: True,
+
+Model degree: 1,
+
+Model discretization: RT,
+
+Mesh degree: 3,
+
+Horizontal refinements: 4,
+
+Vertical layers: 64,
+
+Dx (max, m): 346563.4999224701,
+
+Dz (m): 156.25,
+
+Dt (s): 1996,
+
+horizontal CFL: 2,
+
+vertical CFL: 4435.127450558146.
+
+Computing balanced density field...
+
+
+Setting up hybridized solver on the traces.
+Inner solver: fgmres_gamg_gmres_smoother_stronger
+Starting profiler...
+
+
+Determining Dt from specified horizontal CFL: 4
+
+Problem parameters:
+
+Profiling linear solver for the compressible Euler equations.
+
+Speed of sound in compressible atmosphere: 347.18870949384285,
+
+Hybridized compressible solver: True,
+
+Model degree: 1,
+
+Model discretization: RT,
+
+Mesh degree: 3,
+
+Horizontal refinements: 4,
+
+Vertical layers: 64,
+
+Dx (max, m): 346563.4999224701,
+
+Dz (m): 156.25,
+
+Dt (s): 3992,
+
+horizontal CFL: 4,
+
+vertical CFL: 8870.254901116292.
+
+Computing balanced density field...
+
+
+Setting up hybridized solver on the traces.
+Inner solver: fgmres_gamg_gmres_smoother_stronger
+Starting profiler...
+
+
+Determining Dt from specified horizontal CFL: 6
+
+Problem parameters:
+
+Profiling linear solver for the compressible Euler equations.
+
+Speed of sound in compressible atmosphere: 347.18870949384285,
+
+Hybridized compressible solver: True,
+
+Model degree: 1,
+
+Model discretization: RT,
+
+Mesh degree: 3,
+
+Horizontal refinements: 4,
+
+Vertical layers: 64,
+
+Dx (max, m): 346563.4999224701,
+
+Dz (m): 156.25,
+
+Dt (s): 5989,
+
+horizontal CFL: 6,
+
+vertical CFL: 13307.6043594152.
+
+Computing balanced density field...
+
+
+Setting up hybridized solver on the traces.
+Inner solver: fgmres_gamg_gmres_smoother_stronger
+Starting profiler...
+
+
+Determining Dt from specified horizontal CFL: 8
+
+Problem parameters:
+
+Profiling linear solver for the compressible Euler equations.
+
+Speed of sound in compressible atmosphere: 347.18870949384285,
+
+Hybridized compressible solver: True,
+
+Model degree: 1,
+
+Model discretization: RT,
+
+Mesh degree: 3,
+
+Horizontal refinements: 4,
+
+Vertical layers: 64,
+
+Dx (max, m): 346563.4999224701,
+
+Dz (m): 156.25,
+
+Dt (s): 7985,
+
+horizontal CFL: 8,
+
+vertical CFL: 17742.731809973346.
+
+Computing balanced density field...
+
+
+Setting up hybridized solver on the traces.
+Inner solver: fgmres_gamg_gmres_smoother_stronger
+Starting profiler...
+
+
+Determining Dt from specified horizontal CFL: 10
+
+Problem parameters:
+
+Profiling linear solver for the compressible Euler equations.
+
+Speed of sound in compressible atmosphere: 347.18870949384285,
+
+Hybridized compressible solver: True,
+
+Model degree: 1,
+
+Model discretization: RT,
+
+Mesh degree: 3,
+
+Horizontal refinements: 4,
+
+Vertical layers: 64,
+
+Dx (max, m): 346563.4999224701,
+
+Dz (m): 156.25,
+
+Dt (s): 9981,
+
+horizontal CFL: 10,
+
+vertical CFL: 22177.85926053149.
+
+Computing balanced density field...
+
+
+Setting up hybridized solver on the traces.
+Inner solver: fgmres_gamg_gmres_smoother_stronger
+Starting profiler...
+
+
+Determining Dt from specified horizontal CFL: 12
+
+Problem parameters:
+
+Profiling linear solver for the compressible Euler equations.
+
+Speed of sound in compressible atmosphere: 347.18870949384285,
+
+Hybridized compressible solver: True,
+
+Model degree: 1,
+
+Model discretization: RT,
+
+Mesh degree: 3,
+
+Horizontal refinements: 4,
+
+Vertical layers: 64,
+
+Dx (max, m): 346563.4999224701,
+
+Dz (m): 156.25,
+
+Dt (s): 11978,
+
+horizontal CFL: 12,
+
+vertical CFL: 26615.2087188304.
+
+Computing balanced density field...
+
+
+Setting up hybridized solver on the traces.
+Inner solver: fgmres_gamg_gmres_smoother_stronger
+Starting profiler...
+
+
+Determining Dt from specified horizontal CFL: 14
+
+Problem parameters:
+
+Profiling linear solver for the compressible Euler equations.
+
+Speed of sound in compressible atmosphere: 347.18870949384285,
+
+Hybridized compressible solver: True,
+
+Model degree: 1,
+
+Model discretization: RT,
+
+Mesh degree: 3,
+
+Horizontal refinements: 4,
+
+Vertical layers: 64,
+
+Dx (max, m): 346563.4999224701,
+
+Dz (m): 156.25,
+
+Dt (s): 13974,
+
+horizontal CFL: 14,
+
+vertical CFL: 31050.336169388545.
+
+Computing balanced density field...
+
+
+Setting up hybridized solver on the traces.
+Inner solver: fgmres_gamg_gmres_smoother_stronger
+Starting profiler...
+
+
+Determining Dt from specified horizontal CFL: 16
+
+Problem parameters:
+
+Profiling linear solver for the compressible Euler equations.
+
+Speed of sound in compressible atmosphere: 347.18870949384285,
+
+Hybridized compressible solver: True,
+
+Model degree: 1,
+
+Model discretization: RT,
+
+Mesh degree: 3,
+
+Horizontal refinements: 4,
+
+Vertical layers: 64,
+
+Dx (max, m): 346563.4999224701,
+
+Dz (m): 156.25,
+
+Dt (s): 15971,
+
+horizontal CFL: 16,
+
+vertical CFL: 35487.68562768745.
+
+Computing balanced density field...
+
+
+Setting up hybridized solver on the traces.
+Inner solver: fgmres_gamg_gmres_smoother_stronger
+Starting profiler...
+
+
+Determining Dt from specified horizontal CFL: 18
+
+Problem parameters:
+
+Profiling linear solver for the compressible Euler equations.
+
+Speed of sound in compressible atmosphere: 347.18870949384285,
+
+Hybridized compressible solver: True,
+
+Model degree: 1,
+
+Model discretization: RT,
+
+Mesh degree: 3,
+
+Horizontal refinements: 4,
+
+Vertical layers: 64,
+
+Dx (max, m): 346563.4999224701,
+
+Dz (m): 156.25,
+
+Dt (s): 17967,
+
+horizontal CFL: 18,
+
+vertical CFL: 39922.8130782456.
+
+Computing balanced density field...
+
+
+Setting up hybridized solver on the traces.
+Inner solver: fgmres_gamg_gmres_smoother_stronger
+Starting profiler...
+
+
+Determining Dt from specified horizontal CFL: 20
+
+Problem parameters:
+
+Profiling linear solver for the compressible Euler equations.
+
+Speed of sound in compressible atmosphere: 347.18870949384285,
+
+Hybridized compressible solver: True,
+
+Model degree: 1,
+
+Model discretization: RT,
+
+Mesh degree: 3,
+
+Horizontal refinements: 4,
+
+Vertical layers: 64,
+
+Dx (max, m): 346563.4999224701,
+
+Dz (m): 156.25,
+
+Dt (s): 19963,
+
+horizontal CFL: 20,
+
+vertical CFL: 44357.940528803745.
+
+Computing balanced density field...
+
+
+Setting up hybridized solver on the traces.
+Inner solver: fgmres_gamg_gmres_smoother_stronger
+Starting profiler...
+
+************************************************************************************************************************
+***             WIDEN YOUR WINDOW TO 120 CHARACTERS.  Use 'enscript -r -fCourier9' to print this document            ***
+************************************************************************************************************************
+
+---------------------------------------------- PETSc Performance Summary: ----------------------------------------------
+
+run_profiler.py on a  named mpe2 with 40 processors, by tg2115 Tue Feb 19 22:27:15 2019
+Using Petsc Development GIT revision: v3.4.2-24285-gcd612ee  GIT Date: 2019-01-17 05:31:34 +0100
+
+                         Max       Max/Min     Avg       Total 
+--------------------------------------------------------------------------
+MPI_ABORT was invoked on rank 30 in communicator MPI_COMM_WORLD 
+with errorcode 59.
+
+NOTE: invoking MPI_ABORT causes Open MPI to kill all MPI processes.
+You may or may not see output from other processes, depending on
+exactly when Open MPI kills them.
+--------------------------------------------------------------------------
