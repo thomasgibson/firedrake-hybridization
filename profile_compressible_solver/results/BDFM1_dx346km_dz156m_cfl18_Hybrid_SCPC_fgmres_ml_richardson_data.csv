@@ -1,0 +1,2 @@
+KSPSolve,PCApply,PCSetUp,SNESFunctionEval,SNESJacobianEval,SNESSolve,back_sub,deltax,deltaz,dt,forward_elim,horizontal_courant,inner_solver_type,ksp_iters,mesh_degree,model_degree,model_family,num_cells,num_processes,outer_solver_type,sc_solve,scpc_init,scpc_update,total_dofs,vertical_courant
+102.87524053454399,102.86548619866372,0.0,6.405416417121887,0.0007322192192077637,109.2887730896473,43.3064630150795,346563.4999224701,156.25,17967,0.047103327512741086,18,fgmres_ml_richardson,19,3,1,BDFM,5120,40,Hybrid_SCPC,59.51085346341133,0.0,0.0,13777920,39922.8130782456
