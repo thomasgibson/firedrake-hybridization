@@ -40,11 +40,11 @@ for data in (rt0_gamg_data + rt1_gamg_data +
 
 fig, (axes,) = plt.subplots(1, 1, figsize=(7, 5), squeeze=False)
 ax, = axes
-ax.set_ylim(0, 35)
+ax.set_ylim(0, 20)
 ax.xaxis.set_ticks_position("bottom")
 ax.yaxis.set_ticks_position("left")
 ax.set_xticks(cfl_range)
-ax.set_ylabel("Krylov iterations", fontsize=FONTSIZE)
+ax.set_ylabel("Time to solution (s)", fontsize=FONTSIZE)
 
 # Create data matrices
 rt0_gamg_dfs = pd.concat(pd.read_csv(d) for d in rt0_gamg_data)
@@ -70,59 +70,77 @@ bdfm1_gamg_str_grps = bdfm1_gamg_str_dfs.groupby(["horizontal_courant"],
 
 # RT0, fgmres + AMG(gmres(3))
 rt0_gamg_cfls = []
-rt0_gamg_iters = []
+rt0_gamg_times = []
+t_prev = 0.0
 for group in rt0_gamg_grps:
 
     cfl, df = group
     rt0_gamg_cfls.append(cfl)
-    rt0_gamg_iters.append(df.ksp_iters)
+    time = df.KSPSolve
+    rt0_gamg_times.append(time - t_prev)
+    t_prev = time
 
 # RT1, fgmres + AMG(gmres(3))
 rt1_gamg_cfls = []
-rt1_gamg_iters = []
+rt1_gamg_times = []
+t_prev = 0.0
 for group in rt1_gamg_grps:
 
     cfl, df = group
     rt1_gamg_cfls.append(cfl)
-    rt1_gamg_iters.append(df.ksp_iters)
+    time = df.KSPSolve
+    rt1_gamg_times.append(time - t_prev)
+    t_prev = time
 
 # RT0, fgmres + AMG(gmres(5))
 rt0_gamg_str_cfls = []
-rt0_gamg_str_iters = []
+rt0_gamg_str_times = []
+t_prev = 0.0
 for group in rt0_gamg_str_grps:
 
     cfl, df = group
     rt0_gamg_str_cfls.append(cfl)
-    rt0_gamg_str_iters.append(df.ksp_iters)
+    time = df.KSPSolve
+    rt0_gamg_str_times.append(time - t_prev)
+    t_prev = time
 
 # RT1, fgmres + AMG(gmres(5))
 rt1_gamg_str_cfls = []
-rt1_gamg_str_iters = []
+rt1_gamg_str_times = []
+t_prev = 0.0
 for group in rt1_gamg_str_grps:
 
     cfl, df = group
     rt1_gamg_str_cfls.append(cfl)
-    rt1_gamg_str_iters.append(df.ksp_iters)
+    time = df.KSPSolve
+    rt1_gamg_str_times.append(time - t_prev)
+    t_prev = time
 
 # BDFM1, fgmres + AMG(gmres(3))
 bdfm1_gamg_cfls = []
-bdfm1_gamg_iters = []
+bdfm1_gamg_times = []
+t_prev = 0.0
 for group in bdfm1_gamg_grps:
 
     cfl, df = group
     bdfm1_gamg_cfls.append(cfl)
-    bdfm1_gamg_iters.append(df.ksp_iters)
+    time = df.KSPSolve
+    bdfm1_gamg_times.append(time - t_prev)
+    t_prev = time
 
 # BDFM1, fgmres + AMG(gmres(5))
 bdfm1_gamg_str_cfls = []
-bdfm1_gamg_str_iters = []
+bdfm1_gamg_str_times = []
+t_prev = 0.0
 for group in bdfm1_gamg_str_grps:
 
     cfl, df = group
     bdfm1_gamg_str_cfls.append(cfl)
-    bdfm1_gamg_str_iters.append(df.ksp_iters)
+    time = df.KSPSolve
+    bdfm1_gamg_str_times.append(time - t_prev)
+    t_prev = time
 
-ax.plot(rt0_gamg_cfls, rt0_gamg_iters,
+ax.plot(rt0_gamg_cfls, rt0_gamg_times,
         label="$RT_0$ $gamg(\\mathcal{K}_{{gmres}}(3))$",
         marker="o",
         color=colors[0],
@@ -130,7 +148,7 @@ ax.plot(rt0_gamg_cfls, rt0_gamg_iters,
         linewidth=LINEWIDTH,
         linestyle="solid")
 
-ax.plot(rt0_gamg_str_cfls, rt0_gamg_str_iters,
+ax.plot(rt0_gamg_str_cfls, rt0_gamg_str_times,
         label="$RT_0$ $gamg(\\mathcal{K}_{{gmres}}(5))$",
         marker="o",
         color=colors[0],
@@ -138,7 +156,7 @@ ax.plot(rt0_gamg_str_cfls, rt0_gamg_str_iters,
         linewidth=LINEWIDTH,
         linestyle="dotted")
 
-ax.plot(rt1_gamg_cfls, rt1_gamg_iters,
+ax.plot(rt1_gamg_cfls, rt1_gamg_times,
         label="$RT_1$ $gamg(\\mathcal{K}_{{gmres}}(3))$",
         marker="^",
         color=colors[1],
@@ -146,7 +164,7 @@ ax.plot(rt1_gamg_cfls, rt1_gamg_iters,
         linewidth=LINEWIDTH,
         linestyle="solid")
 
-ax.plot(rt1_gamg_str_cfls, rt1_gamg_str_iters,
+ax.plot(rt1_gamg_str_cfls, rt1_gamg_str_times,
         label="$RT_1$ $gamg(\\mathcal{K}_{{gmres}}(5))$",
         marker="^",
         color=colors[1],
@@ -154,7 +172,7 @@ ax.plot(rt1_gamg_str_cfls, rt1_gamg_str_iters,
         linewidth=LINEWIDTH,
         linestyle="dotted")
 
-ax.plot(bdfm1_gamg_cfls, bdfm1_gamg_iters,
+ax.plot(bdfm1_gamg_cfls, bdfm1_gamg_times,
         label="$BDFM_1$ $gamg(\\mathcal{K}_{{gmres}}(3))$",
         marker="*",
         color=colors[2],
@@ -162,7 +180,7 @@ ax.plot(bdfm1_gamg_cfls, bdfm1_gamg_iters,
         linewidth=LINEWIDTH,
         linestyle="solid")
 
-ax.plot(bdfm1_gamg_str_cfls, bdfm1_gamg_str_iters,
+ax.plot(bdfm1_gamg_str_cfls, bdfm1_gamg_str_times,
         label="$BDFM_1$ $gamg(\\mathcal{K}_{{gmres}}(5))$",
         marker="*",
         color=colors[2],
@@ -185,7 +203,7 @@ xlabel = fig.text(0.5, -0.15,
                   fontsize=FONTSIZE)
 
 title = fig.text(0.5, 0.9,
-                 "Solver convergence for the trace system",
+                 "Time to solution vs CFL",
                  ha='center',
                  fontsize=FONTSIZE)
 
@@ -200,7 +218,7 @@ legend = fig.legend(handles, labels,
                     numpoints=1,
                     frameon=False)
 
-fig.savefig("cfl_vs_iter_gamg.pdf",
+fig.savefig("cfl_vs_time_gamg.pdf",
             orientation="landscape",
             format="pdf",
             transparent=True,

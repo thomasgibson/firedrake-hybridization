@@ -36,11 +36,11 @@ for data in (rt0_ml_data + rt1_ml_data +
 
 fig, (axes,) = plt.subplots(1, 1, figsize=(7, 5), squeeze=False)
 ax, = axes
-ax.set_ylim(0, 35)
+ax.set_ylim(0, 20)
 ax.xaxis.set_ticks_position("bottom")
 ax.yaxis.set_ticks_position("left")
 ax.set_xticks(cfl_range)
-ax.set_ylabel("Krylov iterations", fontsize=FONTSIZE+2)
+ax.set_ylabel("Time to solution (s)", fontsize=FONTSIZE+2)
 
 # Create data matrices
 rt0_ml_dfs = pd.concat(pd.read_csv(d) for d in rt0_ml_data)
@@ -66,59 +66,77 @@ bdfm1_ml_str_grps = bdfm1_ml_str_dfs.groupby(["horizontal_courant"],
 
 # RT0, fgmres + ML(richardson(3))
 rt0_ml_cfls = []
-rt0_ml_iters = []
+rt0_ml_times = []
+t_prev = 0.0
 for group in rt0_ml_grps:
 
     cfl, df = group
     rt0_ml_cfls.append(cfl)
-    rt0_ml_iters.append(df.ksp_iters)
+    time = df.KSPSolve
+    rt0_ml_times.append(time - t_prev)
+    t_prev = time
 
 # RT1, fgmres + ML(richardson(3))
 rt1_ml_cfls = []
-rt1_ml_iters = []
+rt1_ml_times = []
+t_prev = 0.0
 for group in rt1_ml_grps:
 
     cfl, df = group
     rt1_ml_cfls.append(cfl)
-    rt1_ml_iters.append(df.ksp_iters)
+    time = df.KSPSolve
+    rt1_ml_times.append(time - t_prev)
+    t_prev = time
 
 # RT0, fgmres + ML(richardson(5))
 rt0_ml_str_cfls = []
-rt0_ml_str_iters = []
+rt0_ml_str_times = []
+t_prev = 0.0
 for group in rt0_ml_str_grps:
 
     cfl, df = group
     rt0_ml_str_cfls.append(cfl)
-    rt0_ml_str_iters.append(df.ksp_iters)
+    time = df.KSPSolve
+    rt0_ml_str_times.append(time - t_prev)
+    t_prev = time
 
 # RT1, fgmres + ML(richardson(5))
 rt1_ml_str_cfls = []
-rt1_ml_str_iters = []
+rt1_ml_str_times = []
+t_prev = 0.0
 for group in rt1_ml_str_grps:
 
     cfl, df = group
     rt1_ml_str_cfls.append(cfl)
-    rt1_ml_str_iters.append(df.ksp_iters)
+    time = df.KSPSolve
+    rt1_ml_str_times.append(time - t_prev)
+    t_prev = time
 
 # BDFM1, fgmres + ML(richardson(3))
 bdfm1_ml_cfls = []
-bdfm1_ml_iters = []
+bdfm1_ml_times = []
+t_prev = 0.0
 for group in bdfm1_ml_grps:
 
     cfl, df = group
     bdfm1_ml_cfls.append(cfl)
-    bdfm1_ml_iters.append(df.ksp_iters)
+    time = df.KSPSolve
+    bdfm1_ml_times.append(time - t_prev)
+    t_prev = time
 
 # BDFM1, fgmres + ML(richardson(5))
 bdfm1_ml_str_cfls = []
-bdfm1_ml_str_iters = []
+bdfm1_ml_str_times = []
+t_prev = 0.0
 for group in bdfm1_ml_str_grps:
 
     cfl, df = group
     bdfm1_ml_str_cfls.append(cfl)
-    bdfm1_ml_str_iters.append(df.ksp_iters)
+    time = df.KSPSolve
+    bdfm1_ml_str_times.append(time - t_prev)
+    t_prev = time
 
-ax.plot(rt0_ml_cfls, rt0_ml_iters,
+ax.plot(rt0_ml_cfls, rt0_ml_times,
         label="$RT_0$ $ml(\\mathcal{R}(3))$",
         markersize=MARKERSIZE,
         linewidth=LINEWIDTH,
@@ -126,7 +144,7 @@ ax.plot(rt0_ml_cfls, rt0_ml_iters,
         marker="o",
         linestyle="solid")
 
-ax.plot(rt0_ml_str_cfls, rt0_ml_str_iters,
+ax.plot(rt0_ml_str_cfls, rt0_ml_str_times,
         label="$RT_0$ $ml(\\mathcal{R}(5))$",
         markersize=MARKERSIZE,
         linewidth=LINEWIDTH,
@@ -134,7 +152,7 @@ ax.plot(rt0_ml_str_cfls, rt0_ml_str_iters,
         marker="o",
         linestyle="dotted")
 
-ax.plot(rt1_ml_cfls, rt1_ml_iters,
+ax.plot(rt1_ml_cfls, rt1_ml_times,
         label="$RT_1$ $ml(\\mathcal{R}(3))$",
         markersize=MARKERSIZE,
         linewidth=LINEWIDTH,
@@ -142,7 +160,7 @@ ax.plot(rt1_ml_cfls, rt1_ml_iters,
         marker="^",
         linestyle="solid")
 
-ax.plot(rt1_ml_str_cfls, rt1_ml_str_iters,
+ax.plot(rt1_ml_str_cfls, rt1_ml_str_times,
         label="$RT_1$ $ml(\\mathcal{R}(5))$",
         markersize=MARKERSIZE,
         linewidth=LINEWIDTH,
@@ -150,7 +168,7 @@ ax.plot(rt1_ml_str_cfls, rt1_ml_str_iters,
         marker="^",
         linestyle="dotted")
 
-ax.plot(bdfm1_ml_cfls, bdfm1_ml_iters,
+ax.plot(bdfm1_ml_cfls, bdfm1_ml_times,
         label="$BDFM_1$ $ml(\\mathcal{R}(3))$",
         markersize=MARKERSIZE,
         linewidth=LINEWIDTH,
@@ -158,7 +176,7 @@ ax.plot(bdfm1_ml_cfls, bdfm1_ml_iters,
         marker="*",
         linestyle="solid")
 
-ax.plot(bdfm1_ml_str_cfls, bdfm1_ml_str_iters,
+ax.plot(bdfm1_ml_str_cfls, bdfm1_ml_str_times,
         label="$BDFM_1$ $ml(\\mathcal{R}(5))$",
         markersize=MARKERSIZE,
         linewidth=LINEWIDTH,
@@ -181,7 +199,7 @@ xlabel = fig.text(0.5, -0.15,
                   fontsize=FONTSIZE)
 
 title = fig.text(0.5, 0.9,
-                 "Solver convergence for the trace system",
+                 "Time to solution vs CFL",
                  ha='center',
                  fontsize=FONTSIZE)
 
@@ -196,7 +214,7 @@ legend = fig.legend(handles, labels,
                     numpoints=1,
                     frameon=False)
 
-fig.savefig("cfl_vs_iter_ml.pdf",
+fig.savefig("cfl_vs_times_ml.pdf",
             orientation="landscape",
             format="pdf",
             transparent=True,
