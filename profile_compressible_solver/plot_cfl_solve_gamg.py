@@ -2,6 +2,8 @@ import os
 import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
+
+import matplotlib
 sns.set_context("talk")
 
 
@@ -40,11 +42,10 @@ for data in (rt0_gamg_data + rt1_gamg_data +
 
 fig, (axes,) = plt.subplots(1, 1, figsize=(7, 5), squeeze=False)
 ax, = axes
-ax.set_ylim(0, 20)
 ax.xaxis.set_ticks_position("bottom")
 ax.yaxis.set_ticks_position("left")
 ax.set_xticks(cfl_range)
-ax.set_ylabel("Time to solution (s)", fontsize=FONTSIZE)
+ax.set_ylabel("DOFs per second", fontsize=FONTSIZE)
 
 # Create data matrices
 rt0_gamg_dfs = pd.concat(pd.read_csv(d) for d in rt0_gamg_data)
@@ -77,7 +78,9 @@ for group in rt0_gamg_grps:
     cfl, df = group
     rt0_gamg_cfls.append(cfl)
     time = df.KSPSolve
-    rt0_gamg_times.append(time - t_prev)
+    dofs = df.total_dofs
+    dps = dofs / (time - t_prev)
+    rt0_gamg_times.append(dps)
     t_prev = time
 
 # RT1, fgmres + AMG(gmres(3))
@@ -89,7 +92,9 @@ for group in rt1_gamg_grps:
     cfl, df = group
     rt1_gamg_cfls.append(cfl)
     time = df.KSPSolve
-    rt1_gamg_times.append(time - t_prev)
+    dofs = df.total_dofs
+    dps = dofs / (time - t_prev)
+    rt1_gamg_times.append(dps)
     t_prev = time
 
 # RT0, fgmres + AMG(gmres(5))
@@ -101,7 +106,9 @@ for group in rt0_gamg_str_grps:
     cfl, df = group
     rt0_gamg_str_cfls.append(cfl)
     time = df.KSPSolve
-    rt0_gamg_str_times.append(time - t_prev)
+    dofs = df.total_dofs
+    dps = dofs / (time - t_prev)
+    rt0_gamg_str_times.append(dps)
     t_prev = time
 
 # RT1, fgmres + AMG(gmres(5))
@@ -113,7 +120,9 @@ for group in rt1_gamg_str_grps:
     cfl, df = group
     rt1_gamg_str_cfls.append(cfl)
     time = df.KSPSolve
-    rt1_gamg_str_times.append(time - t_prev)
+    dofs = df.total_dofs
+    dps = dofs / (time - t_prev)
+    rt1_gamg_str_times.append(dps)
     t_prev = time
 
 # BDFM1, fgmres + AMG(gmres(3))
@@ -125,7 +134,9 @@ for group in bdfm1_gamg_grps:
     cfl, df = group
     bdfm1_gamg_cfls.append(cfl)
     time = df.KSPSolve
-    bdfm1_gamg_times.append(time - t_prev)
+    dofs = df.total_dofs
+    dps = dofs / (time - t_prev)
+    bdfm1_gamg_times.append(dps)
     t_prev = time
 
 # BDFM1, fgmres + AMG(gmres(5))
@@ -137,7 +148,9 @@ for group in bdfm1_gamg_str_grps:
     cfl, df = group
     bdfm1_gamg_str_cfls.append(cfl)
     time = df.KSPSolve
-    bdfm1_gamg_str_times.append(time - t_prev)
+    dofs = df.total_dofs
+    dps = dofs / (time - t_prev)
+    bdfm1_gamg_str_times.append(dps)
     t_prev = time
 
 ax.plot(rt0_gamg_cfls, rt0_gamg_times,
@@ -197,13 +210,15 @@ for tick in ax.get_yticklabels():
 
 ax.grid(b=True, which='major', linestyle='-.')
 
+plt.ticklabel_format(style='sci', axis='y', scilimits=(0, 0))
+
 xlabel = fig.text(0.5, -0.15,
                   "Horiz. CFL number\n $\\sqrt{\\frac{c_p T_0}{\\gamma}}\\frac{\\Delta t}{\\Delta x}$",
                   ha='center',
                   fontsize=FONTSIZE)
 
 title = fig.text(0.5, 0.9,
-                 "Time to solution vs CFL",
+                 "DOFs per second vs CFL",
                  ha='center',
                  fontsize=FONTSIZE)
 

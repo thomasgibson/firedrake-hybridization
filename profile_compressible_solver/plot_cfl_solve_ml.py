@@ -36,11 +36,10 @@ for data in (rt0_ml_data + rt1_ml_data +
 
 fig, (axes,) = plt.subplots(1, 1, figsize=(7, 5), squeeze=False)
 ax, = axes
-ax.set_ylim(0, 20)
 ax.xaxis.set_ticks_position("bottom")
 ax.yaxis.set_ticks_position("left")
 ax.set_xticks(cfl_range)
-ax.set_ylabel("Time to solution (s)", fontsize=FONTSIZE+2)
+ax.set_ylabel("DOFs per second", fontsize=FONTSIZE)
 
 # Create data matrices
 rt0_ml_dfs = pd.concat(pd.read_csv(d) for d in rt0_ml_data)
@@ -73,7 +72,9 @@ for group in rt0_ml_grps:
     cfl, df = group
     rt0_ml_cfls.append(cfl)
     time = df.KSPSolve
-    rt0_ml_times.append(time - t_prev)
+    dofs = df.total_dofs
+    dps = dofs / (time - t_prev)
+    rt0_ml_times.append(dps)
     t_prev = time
 
 # RT1, fgmres + ML(richardson(3))
@@ -85,7 +86,9 @@ for group in rt1_ml_grps:
     cfl, df = group
     rt1_ml_cfls.append(cfl)
     time = df.KSPSolve
-    rt1_ml_times.append(time - t_prev)
+    dofs = df.total_dofs
+    dps = dofs / (time - t_prev)
+    rt1_ml_times.append(dps)
     t_prev = time
 
 # RT0, fgmres + ML(richardson(5))
@@ -97,7 +100,9 @@ for group in rt0_ml_str_grps:
     cfl, df = group
     rt0_ml_str_cfls.append(cfl)
     time = df.KSPSolve
-    rt0_ml_str_times.append(time - t_prev)
+    dofs = df.total_dofs
+    dps = dofs / (time - t_prev)
+    rt0_ml_str_times.append(dps)
     t_prev = time
 
 # RT1, fgmres + ML(richardson(5))
@@ -109,7 +114,9 @@ for group in rt1_ml_str_grps:
     cfl, df = group
     rt1_ml_str_cfls.append(cfl)
     time = df.KSPSolve
-    rt1_ml_str_times.append(time - t_prev)
+    dofs = df.total_dofs
+    dps = dofs / (time - t_prev)
+    rt1_ml_str_times.append(dps)
     t_prev = time
 
 # BDFM1, fgmres + ML(richardson(3))
@@ -121,7 +128,9 @@ for group in bdfm1_ml_grps:
     cfl, df = group
     bdfm1_ml_cfls.append(cfl)
     time = df.KSPSolve
-    bdfm1_ml_times.append(time - t_prev)
+    dofs = df.total_dofs
+    dps = dofs / (time - t_prev)
+    bdfm1_ml_times.append(dps)
     t_prev = time
 
 # BDFM1, fgmres + ML(richardson(5))
@@ -133,7 +142,9 @@ for group in bdfm1_ml_str_grps:
     cfl, df = group
     bdfm1_ml_str_cfls.append(cfl)
     time = df.KSPSolve
-    bdfm1_ml_str_times.append(time - t_prev)
+    dofs = df.total_dofs
+    dps = dofs / (time - t_prev)
+    bdfm1_ml_str_times.append(dps)
     t_prev = time
 
 ax.plot(rt0_ml_cfls, rt0_ml_times,
@@ -193,13 +204,15 @@ for tick in ax.get_yticklabels():
 
 ax.grid(b=True, which='major', linestyle='-.')
 
+plt.ticklabel_format(style='sci', axis='y', scilimits=(0, 0))
+
 xlabel = fig.text(0.5, -0.15,
                   "Horiz. CFL number\n $\\sqrt{\\frac{c_p T_0}{\\gamma}}\\frac{\\Delta t}{\\Delta x}$",
                   ha='center',
                   fontsize=FONTSIZE)
 
 title = fig.text(0.5, 0.9,
-                 "Time to solution vs CFL",
+                 "DOFs per second vs CFL",
                  ha='center',
                  fontsize=FONTSIZE)
 
