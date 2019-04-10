@@ -1,4 +1,5 @@
 from firedrake import *
+from firedrake.petsc import PETSc
 from argparse import ArgumentParser
 import sys
 
