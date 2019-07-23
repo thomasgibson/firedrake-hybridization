@@ -1,9 +1,20 @@
 from firedrake import *
+from firedrake import op2
 from firedrake.petsc import PETSc
 from argparse import ArgumentParser
 import pandas as pd
 import numpy as np
 import sys
+
+
+def fmax(f):
+    fmax = op2.Global(1, np.finfo(float).min, dtype=float)
+    op2.par_loop(op2.Kernel("""
+static void maxify(double *a, double *b) {
+    a[0] = a[0] < fabs(b[0]) ? fabs(b[0]) : a[0];
+}
+""", "maxify"), f.dof_dset.set, fmax(op2.MAX), f.dat(op2.READ))
+    return fmax.data[0]
 
 
 ref_to_dt = {3: 3000.0,
@@ -201,7 +212,7 @@ def run_williamson2(refinement_level, dumpfreq=100, test=False,
                       'ksp_type': 'preonly',
                       'pmat_type': 'matfree',
                       'pc_type': 'python',
-                      'pc_python_type': 'scpc.HybridizationPC',
+                      'pc_python_type': 'firedrake.HybridizationPC',
                       'hybridization': {'ksp_type': 'cg',
                                         'pc_type': 'gamg',
                                         'ksp_rtol': 1e-8,
@@ -316,8 +327,8 @@ def run_williamson2(refinement_level, dumpfreq=100, test=False,
     diffD = Function(VD).assign(abs(Dn - D0))
 
     # Normalized Linf error
-    UerrLinf = diffu.dat.data.max() / u0.dat.data.max()
-    DerrLinf = diffD.dat.data.max() / D0.dat.data.max()
+    UerrLinf = fmax(diffu) / fmax(u0)
+    DerrLinf = fmax(diffD) / fmax(D0)
 
     # Normalized L2 error
     UerrL2 = UerrL2/norm(u0, norm_type="L2")
@@ -332,7 +343,7 @@ D_L2errs = []
 U_Linferrs = []
 D_Linferrs = []
 num_cells = []
-for ref_level in [3, 4, 5, 6]:
+for ref_level in [3, 4, 5, 6, 7, 8]:
     L2errs, Linferrs, mesh = run_williamson2(refinement_level=ref_level,
                                              dumpfreq=args.dumpfreq,
                                              test=args.test,
