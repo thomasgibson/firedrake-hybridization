@@ -4,6 +4,7 @@ from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
                        conditional)
 
 
+res_dt = {800.: 4., 400.: 2., 200.: 1., 100.: 0.5, 50.: 0.25}
 tmax = 15.*60.
 L = 51200.
 
