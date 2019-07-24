@@ -14,6 +14,10 @@ parser.add_argument("--refinements",
                     action="store",
                     help="Resolution scaling parameter.")
 
+parser.add_argument("--help",
+                    action="store_true",
+                    help="Show help.")
+
 args, _ = parser.parse_known_args()
 
 
