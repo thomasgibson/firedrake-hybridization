@@ -9,8 +9,8 @@ from matplotlib import pyplot as plt
 
 
 FONTSIZE = 16
-MARKERSIZE = 10
-LINEWIDTH = 3
+MARKERSIZE = 8
+LINEWIDTH = 2
 
 data = "W2-convergence-test-hybridization.csv"
 if not os.path.exists(data):
@@ -35,7 +35,8 @@ for ref in refs:
                                  refinement_level=ref,
                                  degree=3)
 
-    global_normal = Expression(("x[0]", "x[1]", "x[2]"))
+    x = SpatialCoordinate(mesh)
+    global_normal = as_vector(x)
     mesh.init_cell_orientations(global_normal)
 
     V1 = FunctionSpace(mesh, "BDM", 2)
@@ -62,7 +63,7 @@ linestyles = iter(["solid", "dashed", "dashdot", "dotted"])
 
 fig, (axes,) = plt.subplots(1, 1, figsize=(6, 5), squeeze=False)
 ax, = axes
-ax.set_ylabel("Normalized error", fontsize=FONTSIZE)
+ax.set_ylabel("Normalized $L^2$ error", fontsize=FONTSIZE)
 
 ax.spines["left"].set_position(("outward", 10))
 ax.spines["bottom"].set_position(("outward", 10))
@@ -72,9 +73,10 @@ ax.xaxis.set_ticks_position("bottom")
 ax.yaxis.set_ticks_position("left")
 ax.set_xscale('log')
 ax.set_yscale('log')
+ax.set_xlim(6e4, 1e6)
 
 ax.plot(avg_mesh_size, df.NormalizedDepthL2Errors,
-        label="$L^2(D)$",
+        label="$L_{err}^2(h)$",
         linewidth=LINEWIDTH,
         linestyle='solid',
         markersize=MARKERSIZE,
@@ -83,7 +85,7 @@ ax.plot(avg_mesh_size, df.NormalizedDepthL2Errors,
         clip_on=False)
 
 ax.plot(avg_mesh_size, df.NormalizedVelocityL2Errors,
-        label="$L^2(u)$",
+        label="$L_{err}^2(u)$",
         linewidth=LINEWIDTH,
         linestyle='dashed',
         markersize=MARKERSIZE,
@@ -92,7 +94,7 @@ ax.plot(avg_mesh_size, df.NormalizedVelocityL2Errors,
         clip_on=False)
 
 ax.plot(avg_mesh_size, dx2,
-        label="$\propto \Delta h^2$",
+        label="$\propto \Delta x^2$",
         linewidth=LINEWIDTH,
         linestyle='dotted',
         marker=None,
@@ -101,7 +103,7 @@ ax.plot(avg_mesh_size, dx2,
 
 
 xlabel = fig.text(0.5, -.05,
-                  "Average mesh size $\Delta h$",
+                  "Average mesh size $\Delta x$",
                   ha='center',
                   fontsize=FONTSIZE)
 
