@@ -217,5 +217,5 @@ while t < tmax:
         u_out.assign(un)
         h_out.assign(hn + b)
         outfile.write(u_out, h_out, qn)
-        PETSc.Sys.Print("Writing output. t=%s days" % t/day)
+        PETSc.Sys.Print("Writing output. t=%s days" % int(t/day))
         counter -= dumpfreq
