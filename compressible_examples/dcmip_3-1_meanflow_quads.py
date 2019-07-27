@@ -26,10 +26,6 @@ parser = ArgumentParser(description=("""
 DCMIP Test 3-1 Non-orographic gravity waves on a small planet.
 """), add_help=False)
 
-parser.add_argument("--hybridization",
-                    action="store_true",
-                    help="Use a hybridized compressible solver.")
-
 parser.add_argument("--test",
                     action="store_true",
                     help="Enable a quick test run.")
@@ -257,36 +253,11 @@ theta0.interpolate(theta_b)
 # Compute the balanced density
 PETSc.Sys.Print("Computing balanced density field...\n")
 
-# Use vertical hybridization preconditioner for the balance initialization
-pi_params = {
-    'ksp_type': 'preonly',
-    'pc_type': 'python',
-    'mat_type': 'matfree',
-    'pc_python_type': 'gusto.VerticalHybridizationPC',
-    'vert_hybridization': {
-        'ksp_type': 'gmres',
-        'pc_type': 'gamg',
-        'pc_gamg_sym_graph': True,
-        'ksp_rtol': 1e-12,
-        'ksp_atol': 1e-12,
-        'mg_levels': {
-            'ksp_type': 'richardson',
-            'ksp_max_it': 3,
-            'pc_type': 'bjacobi',
-            'sub_pc_type': 'ilu'
-        }
-    }
-}
-if args.debug:
-    pi_params['vert_hybridization']['ksp_monitor_true_residual'] = None
-
 compressible_hydrostatic_balance(state,
                                  theta_b,
                                  rho_b,
                                  top=False,
-                                 pi_boundary=(p/p_0)**kappa,
-                                 solve_for_rho=False,
-                                 params=pi_params)
+                                 pi_boundary=(p/p_0)**kappa)
 
 theta0.interpolate(theta_pert)
 theta0 += theta_b
@@ -306,108 +277,57 @@ advected_fields.append(("rho", SSPRK3(state, rho0, rhoeqn, subcycles=2)))
 advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn, subcycles=2)))
 
 # Set up linear solver
-if hybrid:
-    PETSc.Sys.Print("""
-    Setting up hybridized solver on the traces.""")
+PETSc.Sys.Print("""
+Setting up hybridized solver on the traces.""")
 
-    if args.flexsolver:
-        inner_parameters = {
-            'ksp_type': 'fgmres',
-            'ksp_rtol': args.rtol,
-            'ksp_atol': 1.0e-8,
-            'ksp_max_it': 100,
-            'pc_type': 'gamg',
-            'pc_gamg_sym_graph': True,
-            'mg_levels': {
-                'ksp_type': 'gmres',
-                'ksp_max_it': 5,
-                'pc_type': 'bjacobi',
-                'sub_pc_type': 'ilu'
-            }
-         }
-    else:
-        inner_parameters = {
+if args.flexsolver:
+    inner_parameters = {
+        'ksp_type': 'fgmres',
+        'ksp_rtol': args.rtol,
+        'ksp_atol': 1.0e-8,
+        'ksp_max_it': 100,
+        'pc_type': 'gamg',
+        'pc_gamg_sym_graph': True,
+        'mg_levels': {
             'ksp_type': 'gmres',
-            'ksp_rtol': args.rtol,
-            'ksp_max_it': 100,
-            'pc_type': 'gamg',
-            'mg_levels': {
-                'ksp_type': 'richardson',
-                'ksp_richardson_scale': args.richardson_scale,
-                'pc_type': 'bjacobi',
-                'sub_pc_type': 'ilu'
-            }
+            'ksp_max_it': 5,
+            'pc_type': 'bjacobi',
+            'sub_pc_type': 'ilu'
         }
-    if args.debug:
-        inner_parameters['ksp_monitor_true_residual'] = None
-
-    # Use Firedrake static condensation interface
-    solver_parameters = {
-        'mat_type': 'matfree',
-        'ksp_type': 'preonly',
-        'pc_type': 'python',
-        'pc_python_type': 'firedrake.SCPC',
-        'pc_sc_eliminate_fields': '0, 1',
-        'condensed_field': inner_parameters
     }
-
-    PETSc.Sys.Print("""
-    Full solver options:\n
-    %s
-    """ % solver_parameters)
-    linear_solver = HybridizedCompressibleSolver(state,
-                                                 solver_parameters=solver_parameters,
-                                                 overwrite_solver_parameters=True)
 else:
-    PETSc.Sys.Print("""
-    Setting up GMRES fieldsplit solver with Schur complement PC.""")
-
-    # WARNING: I do not trust these parameters even for the non-hybrid case.
-    # I do not believe that the approximate Schur complement is symmetric at
-    # all. For larger dt, not even the gmres + approx sc approach behaves well.
-
-    # Aggressive AMG procedure
-    mg_params = {
-        'ksp_type': 'chebyshev',
-        'ksp_chebyshev_esteig': True,
-        'ksp_max_it': 5,
-        'pc_type': 'bjacobi',
-        'sub_pc_type': 'ilu'
-    }
-
-    solver_parameters = {
-        'pc_type': 'fieldsplit',
-        'pc_fieldsplit_type': 'schur',
+    inner_parameters = {
         'ksp_type': 'gmres',
         'ksp_rtol': args.rtol,
         'ksp_max_it': 100,
-        'ksp_gmres_restart': 30,
-        'pc_fieldsplit_schur_fact_type': 'FULL',
-        'pc_fieldsplit_schur_precondition': 'selfp',
-        'fieldsplit_0': {
-            'ksp_type': 'preonly',
+        'pc_type': 'gamg',
+        'mg_levels': {
+            'ksp_type': 'richardson',
+            'ksp_richardson_scale': args.richardson_scale,
             'pc_type': 'bjacobi',
             'sub_pc_type': 'ilu'
-        },
-        'fieldsplit_1': {
-            'ksp_type': 'preonly',
-            'pc_type': 'gamg',
-            'pc_gamg_sym_graph': True,
-            'pc_gamg_reuse_interpolation': True,
-            'mg_levels': mg_params
         }
     }
+if args.debug:
+    inner_parameters['ksp_monitor_true_residual'] = None
 
-    if args.debug:
-        solver_parameters['ksp_monitor_true_residual'] = None
+# Use Firedrake static condensation interface
+solver_parameters = {
+    'mat_type': 'matfree',
+    'ksp_type': 'preonly',
+    'pc_type': 'python',
+    'pc_python_type': 'firedrake.SCPC',
+    'pc_sc_eliminate_fields': '0, 1',
+    'condensed_field': inner_parameters
+}
 
-    PETSc.Sys.Print("""
-    Full solver options:\n
-    %s
-    """ % solver_parameters)
-    linear_solver = CompressibleSolver(state,
-                                       solver_parameters=solver_parameters,
-                                       overwrite_solver_parameters=True)
+PETSc.Sys.Print("""
+Full solver options:\n
+%s
+""" % solver_parameters)
+linear_solver = CompressibleSolver(state,
+                                   solver_parameters=solver_parameters,
+                                   overwrite_solver_parameters=True)
 
 # Set up forcing
 compressible_forcing = CompressibleForcing(state)
