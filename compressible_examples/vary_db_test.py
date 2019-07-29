@@ -37,7 +37,7 @@ H = 6400.  # Height position of the model top
 
 dumptime = 300.   # dump every 300s
 
-for delta in [800.]: #, 400., 200., 100., 50., 25.]:
+for delta in [800., 400., 200., 100., 50., 25.]:
     dt = res_dt[delta]
 
     dirname = "res_test_db_dx%s_dt%s" % (delta, dt)
