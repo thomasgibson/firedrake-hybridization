@@ -2,6 +2,30 @@ from gusto import *
 from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
                        Constant, DirichletBC, pi, cos, Function, sqrt,
                        conditional)
+from argparse import ArgumentParser
+from schur_complement_solver import OldCompressibleSolver
+from firedrake.petsc import PETSc
+import sys
+
+
+parser = ArgumentParser(description=("""
+Density current test by Straka et al (1993).
+"""), add_help=False)
+
+parser.add_argument("--oldsolver",
+                    action="store_true",
+                    help="Switch on schur-complement solver.")
+
+parser.add_argument("--help",
+                    action="store_true",
+                    help="Show help.")
+
+args, _ = parser.parse_known_args()
+
+if args.help:
+    help = parser.format_help()
+    PETSc.Sys.Print("%s\n" % help)
+    sys.exit(1)
 
 
 res_dt = {800.: 4., 400.: 2., 200.: 1., 100.: 0.5, 50.: 0.25, 25.: 0.125}
@@ -13,10 +37,13 @@ H = 6400.  # Height position of the model top
 
 dumptime = 300.   # dump every 300s
 
-for delta in [25.]:
+for delta in [800.]: #, 400., 200., 100., 50., 25.]:
     dt = res_dt[delta]
 
     dirname = "res_test_db_dx%s_dt%s" % (delta, dt)
+    if args.oldsolver:
+        dirname += "oldsolver"
+
     nlayers = int(H/delta)  # horizontal layers
     columns = int(L/delta)  # number of columns
     dumpfreq = int(dumptime / dt)
@@ -100,7 +127,10 @@ for delta in [25.]:
     advected_fields.append(("theta", SSPRK3(state, theta0, thetaeqn)))
 
     # Set up linear solver
-    linear_solver = CompressibleSolver(state)
+    if args.oldsolver:
+        linear_solver = OldCompressibleSolver(state)
+    else:
+        linear_solver = CompressibleSolver(state)
 
     # Set up forcing
     compressible_forcing = CompressibleForcing(state)
