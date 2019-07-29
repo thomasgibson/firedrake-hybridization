@@ -4,7 +4,7 @@ from firedrake import (PeriodicIntervalMesh, ExtrudedMesh, SpatialCoordinate,
                        conditional)
 
 
-res_dt = {25.: 0.125}
+res_dt = {800.: 4., 400.: 2., 200.: 1., 100.: 0.5, 50.: 0.25, 25.: 0.125}
 tmax = 15.*60.
 L = 51200.
 
@@ -13,7 +13,7 @@ H = 6400.  # Height position of the model top
 
 dumptime = 300.   # dump every 300s
 
-for delta in [800., 400., 200., 100., 50.]:
+for delta in [25.]:
     dt = res_dt[delta]
 
     dirname = "res_test_db_dx%s_dt%s" % (delta, dt)
