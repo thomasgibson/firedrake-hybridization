@@ -81,14 +81,14 @@ def run_williamson2(refinement_level, dumpfreq=100, test=False,
                                  refinement_level=refinement_level,
                                  degree=3)
 
-    global_normal = Expression(("x[0]", "x[1]", "x[2]"))
+    global_normal = SpatialCoordinate(mesh)
     mesh.init_cell_orientations(global_normal)
 
     x = SpatialCoordinate(mesh)
 
     # Maximum amplitude of zonal winds (m/s)
     u_0 = 2*pi*R/(12*day)
-    bexpr = Expression("0.")  # No topography
+    bexpr = Constant(0.0)  # No topography
 
     if test:
         tmax = 5*Dt
@@ -150,9 +150,9 @@ def run_williamson2(refinement_level, dumpfreq=100, test=False,
 
     Dproblem = LinearVariationalProblem(lhs(Deqn), rhs(Deqn), Dps)
     Dsolver = LinearVariationalSolver(Dproblem,
-                                      solver_parameters={'ksp_type': 'cg',
-                                                         'pc_type': 'bjacobi',
-                                                         'sub_pc_type': 'ilu'},
+                                      solver_parameters={'ksp_type': 'preonly',
+                                                         'pc_type': 'lu',
+                                                         'pc_factor_mat_solver_type': 'mumps'},
                                       options_prefix="D-advection")
 
     # Stage 2: U update
@@ -181,9 +181,9 @@ def run_williamson2(refinement_level, dumpfreq=100, test=False,
 
     Uproblem = LinearVariationalProblem(lhs(ueqn), rhs(ueqn), Ups)
     Usolver = LinearVariationalSolver(Uproblem,
-                                      solver_parameters={'ksp_type': 'gmres',
-                                                         'pc_type': 'bjacobi',
-                                                         'sub_pc_type': 'ilu'},
+                                      solver_parameters={'ksp_type': 'preonly',
+                                                         'pc_type': 'lu',
+                                                         'pc_factor_mat_solver_type': 'mumps'},
                                       options_prefix="U-advection")
 
     # Stage 3: Implicit linear solve for u, D increments
@@ -213,8 +213,9 @@ def run_williamson2(refinement_level, dumpfreq=100, test=False,
                       'pmat_type': 'matfree',
                       'pc_type': 'python',
                       'pc_python_type': 'firedrake.HybridizationPC',
-                      'hybridization': {'ksp_type': 'fgmres',
-                                        'pc_type': 'gamg',
+                      'hybridization': {'ksp_type': 'preonly',
+                                        'pc_type': 'lu',
+                                        'pc_factor_mat_solver_type': 'mumps',
                                         'ksp_rtol': 1e-8,
                                         'mg_levels': {'ksp_type': 'gmres',
                                                       'ksp_max_it': 3,
@@ -343,7 +344,7 @@ D_L2errs = []
 U_Linferrs = []
 D_Linferrs = []
 num_cells = []
-for ref_level in [3, 4, 5, 6, 7, 8]:
+for ref_level in [3, 4, 5, 6, 7]:
     L2errs, Linferrs, mesh = run_williamson2(refinement_level=ref_level,
                                              dumpfreq=args.dumpfreq,
                                              test=args.test,
