@@ -4,12 +4,12 @@ import sys
 import pandas as pd
 import seaborn
 import matplotlib
+import numpy as np
 
 from matplotlib import pyplot as plt
 
-
 FONTSIZE = 16
-MARKERSIZE = 8
+MARKERSIZE = 10
 LINEWIDTH = 2
 
 data = "W2-convergence-test-hybridization.csv"
@@ -18,8 +18,6 @@ if not os.path.exists(data):
     sys.exit(1)
 
 df = pd.read_csv(data)
-
-seaborn.set(style="ticks")
 
 # Set up mesh information
 refs = [3, 4, 5, 6]
@@ -57,9 +55,13 @@ for ref in refs:
     u_dofs.append(u.dof_dset.layout_vec.getSize())
     D_dofs.append(D.dof_dset.layout_vec.getSize())
 
+dx2 = [x*0.5e-1 for x in dx2]
+
 colors = ['#30a2da', '#fc4f30']
 markers = iter(["o", "s", "^", "D"])
 linestyles = iter(["solid", "dashed", "dashdot", "dotted"])
+
+plt.style.use("seaborn-darkgrid")
 
 fig, (axes,) = plt.subplots(1, 1, figsize=(6, 5), squeeze=False)
 ax, = axes
@@ -74,9 +76,19 @@ ax.yaxis.set_ticks_position("left")
 ax.set_xscale('log')
 ax.set_yscale('log')
 ax.set_xlim(6e4, 1e6)
+ax.grid(b=True, which='major', linestyle='-.')
+
+derrs = np.array(df.NormalizedDepthL2Errors)
+hh = np.array(avg_mesh_size)
+convrates_D = np.log(derrs[:-1] / derrs[1:])/np.log(hh[:-1] / hh[1:])
+print(convrates_D)
+
+uerrs = np.array(df.NormalizedVelocityL2Errors)
+convrates_u = np.log(uerrs[:-1] / uerrs[1:])/np.log(hh[:-1] / hh[1:])
+print(convrates_u)
 
 ax.plot(avg_mesh_size, df.NormalizedDepthL2Errors,
-        label="$L_{err}^2(h)$",
+        label="$L_{err}^2(D)$",
         linewidth=LINEWIDTH,
         linestyle='solid',
         markersize=MARKERSIZE,
@@ -87,7 +99,7 @@ ax.plot(avg_mesh_size, df.NormalizedDepthL2Errors,
 ax.plot(avg_mesh_size, df.NormalizedVelocityL2Errors,
         label="$L_{err}^2(u)$",
         linewidth=LINEWIDTH,
-        linestyle='dashed',
+        linestyle='solid',
         markersize=MARKERSIZE,
         marker=next(markers),
         color=colors[1],
@@ -96,7 +108,7 @@ ax.plot(avg_mesh_size, df.NormalizedVelocityL2Errors,
 ax.plot(avg_mesh_size, dx2,
         label="$\propto \Delta x^2$",
         linewidth=LINEWIDTH,
-        linestyle='dotted',
+        linestyle='solid',
         marker=None,
         color='k',
         clip_on=False)
@@ -118,10 +130,13 @@ legend = fig.legend(handles, labels,
                     numpoints=1,
                     frameon=False)
 
-seaborn.despine(fig)
+ax.tick_params(axis='both', which='major', labelsize=FONTSIZE-2)
+
+# ax.set_xticks(hh)
+# ax.set_xticklabels(['{:5.1E}'.format(x) for x in hh])
+# seaborn.despine(fig)
 fig.savefig("swe-convergence.pdf",
             orientation="landscape",
             format="pdf",
-            transparent=True,
             bbox_inches="tight",
             bbox_extra_artists=[xlabel, legend])
