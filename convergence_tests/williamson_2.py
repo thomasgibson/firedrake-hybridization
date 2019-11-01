@@ -75,7 +75,7 @@ def run_williamson2(refinement_level, dumpfreq=100, test=False,
 
     Dt = ref_to_dt[refinement_level]
     R = 6371220.
-    H = Constant(5960.)
+    H0 = Constant(2998.0)
     day = 24.*60.*60.
     mesh = IcosahedralSphereMesh(radius=R,
                                  refinement_level=refinement_level,
@@ -114,7 +114,7 @@ def run_williamson2(refinement_level, dumpfreq=100, test=False,
     u_max = Constant(u_0)
     R0 = Constant(R)
     uexpr = as_vector([-u_max*x[1]/R0, u_max*x[0]/R0, 0.0])
-    h0 = Constant(H)
+    h0 = Constant(H0)
     Omega = Constant(7.292e-5)
     g = Constant(9.810616)
     Dexpr = h0 - ((R0 * Omega * u_max + u_max*u_max/2.0)*(x[2]*x[2]/(R0*R0)))/g
@@ -122,6 +122,10 @@ def run_williamson2(refinement_level, dumpfreq=100, test=False,
     un.project(uexpr)
     b = Function(VD, name="Topography").interpolate(bexpr)
     Dn -= b
+
+    temp = Function(VD).assign(1.0)
+    H = Constant(assemble(Dexpr*dx)/assemble(temp*dx))
+    PETSc.Sys.Print("H: %s" % H.dat.data[0])
 
     # Coriolis expression (1/s)
     fexpr = 2*Omega*x[2]/R0
@@ -208,19 +212,16 @@ def run_williamson2(refinement_level, dumpfreq=100, test=False,
     DUproblem = NonlinearVariationalProblem(FuD, DU)
 
     if hybridization:
+        PETSc.Sys.Print("Using hybridization for linear solver.")
         parameters = {'snes_type': 'ksponly',
                       'ksp_type': 'preonly',
+                      'mat_type': 'matfree',
                       'pmat_type': 'matfree',
                       'pc_type': 'python',
                       'pc_python_type': 'firedrake.HybridizationPC',
                       'hybridization': {'ksp_type': 'preonly',
                                         'pc_type': 'lu',
-                                        'pc_factor_mat_solver_type': 'mumps',
-                                        'ksp_rtol': 1e-8,
-                                        'mg_levels': {'ksp_type': 'gmres',
-                                                      'ksp_max_it': 3,
-                                                      'pc_type': 'bjacobi',
-                                                      'sub_pc_type': 'ilu'}}}
+                                        'pc_factor_mat_solver_type': 'mumps'}}
 
     else:
         parameters = {'snes_type': 'ksponly',
@@ -324,12 +325,12 @@ def run_williamson2(refinement_level, dumpfreq=100, test=False,
     UerrL2 = errornorm(un, u0, norm_type="L2")
     DerrL2 = errornorm(Dn, D0, norm_type="L2")
 
-    diffu = Function(Vu).assign(abs(un - u0))
-    diffD = Function(VD).assign(abs(Dn - D0))
+    diffu = Function(Vu).assign(un - u0)
+    diffD = Function(VD).assign(Dn - D0)
 
     # Normalized Linf error
-    UerrLinf = fmax(diffu) / fmax(u0)
-    DerrLinf = fmax(diffD) / fmax(D0)
+    UerrLinf = diffu.dat.data.max() / u0.dat.data.max()
+    DerrLinf = diffD.dat.data.max() / D0.dat.data.max()
 
     # Normalized L2 error
     UerrL2 = UerrL2/norm(u0, norm_type="L2")
@@ -344,7 +345,7 @@ D_L2errs = []
 U_Linferrs = []
 D_Linferrs = []
 num_cells = []
-for ref_level in [3, 4, 5, 6, 7]:
+for ref_level in [3, 4, 5, 6]:
     L2errs, Linferrs, mesh = run_williamson2(refinement_level=ref_level,
                                              dumpfreq=args.dumpfreq,
                                              test=args.test,
